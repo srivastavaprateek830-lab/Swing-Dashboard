@@ -26,8 +26,6 @@ st.divider()
 # --- B. CREDENTIAL SIDEBAR PIPELINE ---
 with st.sidebar:
     st.header("🔑 Developer API Credentials")
-    
-    # Check if secrets exist, otherwise show input fields
     client_id = st.secrets.get("DHAN_CLIENT_ID", st.text_input("Dhan Client ID", type="password"))
     access_token = st.secrets.get("DHAN_ACCESS_TOKEN", st.text_input("Dhan Access Token", type="password"))
     
@@ -215,12 +213,3 @@ if client_id and access_token:
         st.error("Could not fetch the live NSE F&O Master file from Dhan. Please check your internet connection.")
 else:
     st.info("💡 Gateway Interface Offline: Supply your credentials via secrets or sidebar to automatically map all F&O securities.")
-    
-    st.markdown("""
-    ### 🛠️ Production Desktop Execution Workflow
-    1. **Log in to Developer Dashboard**: Extract your tokens safely from the Dhan Portal.
-    2. **Execute Local Server Core**: Run the app from your terminal using:
-    ```bash
-    streamlit run app.py
-    ```
-    """)
