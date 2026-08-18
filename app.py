@@ -36,23 +36,27 @@ with st.sidebar:
     st_mult = st.number_input("Supertrend Multiplier", min_value=0.5, max_value=10.0, value=3.0, step=0.5)
     rsi_th = st.number_input("RSI Oversold Threshold", min_value=10, max_value=50, value=38)
 
-# --- C. AUTOMATED SCRIP MASTER INGESTION (ROBUST TOKEN FIX) ---
+# --- C. AUTOMATED SCRIP MASTER INGESTION (UPDATED DHAN COLS) ---
 @st.cache_data(ttl=86400)
 def fetch_live_fno_master():
-    """Fetches the official Dhan global scrip master file, explicitly skipping bad lines 
-    caused by commas inside company names."""
+    """Fetches Dhan's global scrip master file, mapping using updated column tokens 
+    to filter down dynamically to all tradeable F&O symbols."""
     url = "https://images.dhan.co/api-data/api-scrip-master.csv"
     try:
         response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            # Added on_bad_lines='skip' to bypass the tokenization field calculation errors perfectly
             df_master = pd.read_csv(io.StringIO(response.text), on_bad_lines='skip', low_memory=False)
             
-            fno_mask = (df_master['SEM_EXCH_SEGMENT'].astype(str).str.upper() == 'NSE_EQ') & \
-                       (df_master['SEM_INSTRUMENT_NAME'].astype(str).str.upper() == 'EQUITY') & \
-                       (df_master['SEM_SERIES'].astype(str).str.upper() == 'EQ')
+            # Map column names explicitly using Dhan's documentation update:
+            # SEM_EXM_EXCH_ID = Exchange ('NSE', 'BSE')
+            # SEM_SEGMENT = Segment ('E' for Equity, 'D' for Derivatives)
+            # SEM_INSTRUMENT_NAME = Instrument Type ('EQUITY')
+            fno_mask = (df_master['SEM_EXM_EXCH_ID'].astype(str).str.upper() == 'NSE') & \
+                       (df_master['SEM_SEGMENT'].astype(str).str.upper() == 'E') & \
+                       (df_master['SEM_INSTRUMENT_NAME'].astype(str).str.upper() == 'EQUITY')
             
-            fno_symbols = df_master[df_master['SEM_EXCH_SEGMENT'].astype(str).str.upper() == 'NSE_FO']['SEM_UNDERLYING'].dropna().unique()
+            # Extract underlying items listed under derivatives segment ('D')
+            fno_symbols = df_master[df_master['SEM_SEGMENT'].astype(str).str.upper() == 'D']['SEM_UNDERLYING'].dropna().unique()
             df_filtered = df_master[fno_mask & df_master['SEM_TRADING_SYMBOL'].isin(fno_symbols)]
             
             mapping = {}
@@ -103,7 +107,8 @@ if client_id and access_token:
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-        # Scan top 40 assets sequentially to stay safely within broker API hourly rate-limits
+        
+        # Scan top 40 assets sequentially to stay safely within broker API rate-limits
         active_keys = list(fno_universe.keys())[:40]
         
         for idx, symbol in enumerate(active_keys):
