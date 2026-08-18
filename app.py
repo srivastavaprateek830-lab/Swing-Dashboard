@@ -30,21 +30,18 @@ with st.sidebar:
     st.divider()
     st.success("Mathematical Sandbox Mode: Active")
 
-# --- C. FAIL-PROOF OHLC DATA GENERATOR (100% ERROR-FREE RUNTIME GUARANTEE) ---
+# --- C. FAIL-PROOF OHLC DATA GENERATOR ---
 def generate_verified_market_data(symbol, days=120):
     """Programmatically generates realistic historical market data structures matching 
     NSE high-volatility underlyings to verify RSI, MACD, and Supertrend calculations."""
     np.random.seed(hash(symbol) % 10000)
     
-    # Establish sequential timelines
     end_date = datetime.now()
     dates = [end_date - timedelta(days=x) for x in range(days)]
     dates.reverse()
     
-    # Base asset initial configuration rules
     base_price = {"RELIANCE": 2400, "HDFCBANK": 1500, "SBIN": 750, "INFY": 1450, "TCS": 3800, "ICICIBANK": 1050}.get(symbol, 1000)
     
-    # Generate continuous random walk pricing waves
     returns = np.random.normal(0.001, 0.015, days)
     price_series = base_price * np.exp(np.cumsum(returns))
     
@@ -168,7 +165,7 @@ if scanned_matrix_results:
                 st.error(f"⚠️ **{item['Ticker']}**: Trailing stop broken on daily timeframe.")
     st.divider()
 
-    # --- G. LIVE DATA FRAME RADAR MATRIX ---
+    # --- G. LIVE DATA FRAME RADAR MATRIX (FIXED MAP METHOD) ---
     st.subheader("📋 Active Execution Strategy Radar Array")
     def styling_matrix_filters(val):
         if "FLIP" in str(val) or "RUNNING" in str(val): return 'color: #10b981; font-weight: bold;'
@@ -176,6 +173,7 @@ if scanned_matrix_results:
         return 'color: #cbd5e1;'
 
     clean_display_df = master_summary_df.drop(columns=['df_ref'])
-    st.dataframe(clean_display_df.style.applymap(styling_matrix_filters, subset=['System Signal']), use_container_width=True, hide_index=True)
+    # CRITICAL FIX: Changed .applymap() to modern .map() to natively prevent Pandas Styler errors
+    st.dataframe(clean_display_df.style.map(styling_matrix_filters, subset=['System Signal']), use_container_width=True, hide_index=True)
 else:
     st.warning("Computational queue empty. Verify local numeric matrices configurations.")
