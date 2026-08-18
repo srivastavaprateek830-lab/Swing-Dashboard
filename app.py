@@ -21,7 +21,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ SUPERCONFIRM: Swing Trading Command Center")
-st.caption("Live Vector Strategy Engine • Scanning Real-Time NSE F&O Universe via Dhan Data Gateway")
+st.caption("Live Vector Strategy Engine • Scanning Real-Time Dynamic NSE F&O Universe")
 st.divider()
 
 # --- B. CREDENTIAL SIDEBAR PIPELINE ---
@@ -36,41 +36,59 @@ with st.sidebar:
     st_mult = st.number_input("Supertrend Multiplier", min_value=0.5, max_value=10.0, value=3.0, step=0.5)
     rsi_th = st.number_input("RSI Oversold Threshold", min_value=10, max_value=50, value=38)
 
-# --- C. AUTOMATED SCRIP MASTER INGESTION (ADAPTIVE HEADERS) ---
+# --- C. AUTOMATED SCRIP MASTER INGESTION (100% LIVE, ZERO MOCK CODES) ---
 @st.cache_data(ttl=86400)
 def fetch_live_fno_master():
+    """Fetches the raw global master file from Dhan, dynamically maps column names, 
+    and returns the entire live universe of tradeable symbols mapped to their numeric IDs."""
     url = "https://dhan.co"
-    fallback_scrips = ["RELIANCE", "HDFCBANK", "SBIN", "ICICIBANK", "INFY", "TCS", "TATAMOTORS", "BHARTIARTL", "AXISBANK", "MARUTI"]
     try:
         response = requests.get(url, timeout=15)
         if response.status_code == 200:
             df_master = pd.read_csv(io.StringIO(response.text), on_bad_lines='skip', low_memory=False)
+            
+            # Normalize column names to uppercase to match dynamically
             cols = {c.upper(): c for c in df_master.columns}
             
+            # Dynamically identify the column names currently used by the server
             exch_col = cols.get('SEM_EXM_EXCH_ID', cols.get('SEM_EXCH_SEGMENT', ''))
             segment_col = cols.get('SEM_SEGMENT', '')
             symbol_col = cols.get('SEM_TRADING_SYMBOL', '')
+            id_col = cols.get('SEM_SM_ID', '')
+            underlying_col = next((cols[k] for k in cols if 'UNDERLYING' in k), '')
             
-            if not exch_col or not segment_col or not symbol_col:
-                return {s: "NSE_EQ" for s in fallback_scrips}
+            # Enforce strict exit logic if the server changes key formatting
+            if not exch_col or not segment_col or not symbol_col or not id_col:
+                st.error("Dhan data feed structure has changed. Unable to parse data columns.")
+                return {}
                 
-            fno_mask = (df_master[exch_col].astype(str).str.upper().str.contains('NSE')) & \
-                       (df_master[segment_col].astype(str).str.upper() == 'E')
+            # Create a mask for standard NSE Equities
+            equity_mask = (df_master[exch_col].astype(str).str.upper().str.contains('NSE')) & \
+                          (df_master[segment_col].astype(str).str.upper() == 'E')
             
-            df_filtered = df_master[fno_mask]
-            if df_filtered.empty:
-                return {s: "NSE_EQ" for s in fallback_scrips}
+            # Isolate the live F&O universe by checking which stocks are listed under the Derivatives segment ('D')
+            if underlying_col and underlying_col in df_master.columns:
+                fno_underlyings = df_master[df_master[segment_col].astype(str).str.upper() == 'D'][underlying_col].dropna().unique()
+                df_filtered = df_master[equity_mask & df_master[symbol_col].isin(fno_underlyings)]
+            else:
+                df_filtered = df_master[equity_mask]
                 
             mapping = {}
             for _, row in df_filtered.iterrows():
                 symbol = str(row[symbol_col])
                 if symbol.endswith("-EQ"):
                     symbol = symbol.replace("-EQ", "")
-                mapping[symbol] = "NSE_EQ"
+                
+                # Filter out symbols containing numbers to focus strictly on pure company tickers
+                if symbol.isalpha():
+                    mapping[symbol] = {
+                        "security_id": str(int(row[id_col])),
+                        "segment": "NSE_EQ"
+                    }
             return mapping
-    except Exception:
-        pass
-    return {s: "NSE_EQ" for s in fallback_scrips}
+    except Exception as e:
+        st.error(f"Fatal error reading live broker registry stream: {e}")
+    return {}
 
 def calculate_supertrend(df, period=7, multiplier=3):
     high, low, close = df['high'], df['low'], df['close']
@@ -104,7 +122,7 @@ if client_id and access_token:
     fno_universe = fetch_live_fno_master()
     
     if fno_universe:
-        st.sidebar.success(f"Synchronized Active Core Strategy Tracking Instruments!")
+        st.sidebar.success(f"Synchronized {len(fno_universe)} Real-Time F&O Assets!")
         scanned_matrix_results = []
         end_date = datetime.now()
         start_date = end_date - timedelta(days=120)
@@ -112,17 +130,19 @@ if client_id and access_token:
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Pull clean ticker symbols 
-        active_keys = [k for k in fno_universe.keys() if k.isalpha()][:30]
+        # Pull the live tokens dynamically sorted alphabetically
+        active_keys = sorted(list(fno_universe.keys()))[:35]
         
         for idx, symbol in enumerate(active_keys):
-            status_text.text(f"Extracting Live Broker Historical Candles: {symbol} ({idx+1}/{len(active_keys)})...")
+            meta = fno_universe[symbol]
+            numeric_id = meta["security_id"]
+            
+            status_text.text(f"Processing Live Tokens: {symbol} (ID: {numeric_id}) [{idx+1}/{len(active_keys)}]...")
             progress_bar.progress((idx + 1) / len(active_keys))
             
             try:
-                # FIXED ARGUMENT MATRIX: Passed using explicit keys required by the Dhan REST client schema
                 raw_ohlc = dhan.historical_daily_data(
-                    symbol=symbol,
+                    symbol=numeric_id,
                     exchange_segment="NSE_EQ",
                     instrument_type="EQUITY",
                     expiry_code=0,
@@ -135,7 +155,7 @@ if client_id and access_token:
                     df['start_Time'] = pd.to_datetime(df['start_Time'])
                     df = df.sort_values(by='start_Time').reset_index(drop=True)
                     
-                    # RUN STRATEGY LOGIC VECTOR MATRICES
+                    # Compute vector indicator matrices
                     df['RSI_14'] = RSIIndicator(close=df['close'], window=14).rsi()
                     macd_calc = MACD(close=df['close'], window_fast=12, window_slow=26, window_sign=9)
                     df['MACD'] = macd_calc.macd()
@@ -213,6 +233,6 @@ if client_id and access_token:
         else:
             st.warning("No candle data returned from server parameters. Check your Dhan account subscription or endpoint configurations.")
     else:
-        st.error("Could not process the master dictionary file. Check connection configurations.")
+        st.error("Failed to parse live tokens from server registry. Check internet connectivity.")
 else:
     st.info("💡 Gateway Interface Offline: Supply your credentials via secrets or sidebar to automatically map all F&O securities.")
