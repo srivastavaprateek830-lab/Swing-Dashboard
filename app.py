@@ -114,7 +114,8 @@ def calculate_supertrend(df, period=7, multiplier=3):
     return supertrend, direction
 # --- D. APPLICATION RUNTIME ENGINE LOOP ---
 if client_id and access_token:
-    dhan = dhanhq(client_id, access_token)
+    dhan_context = DhanContext(client_id, access_token)
+dhan = dhanhq(dhan_context)
     fno_universe = fetch_live_fno_master()
     
     if fno_universe:
