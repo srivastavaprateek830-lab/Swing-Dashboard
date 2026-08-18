@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 import plotly.graph_objects as go
 from dhanhq import dhanhq
 from datetime import datetime, timedelta
 import requests
 import io
+
+# Import pure-python modern technical analysis engines
+import ta
+from ta.momentum import RSIIndicator
+from ta.trend import MACD
 
 # --- A. INITIAL INTERFACE STYLE CONFIG ---
 st.set_page_config(page_title="SUPERCONFIRM: Swing Trading Command Center", layout="wide", page_icon="⚡")
@@ -35,7 +39,7 @@ with st.sidebar:
     st_mult = st.number_input("Supertrend Multiplier", min_value=0.5, max_value=10.0, value=3.0, step=0.5)
     rsi_th = st.number_input("RSI Oversold Threshold", min_value=10, max_value=50, value=38)
 
-# --- C. AUTOMATED SCRIP MASTER INGESTION (NO MOCK DATA) ---
+# --- C. AUTOMATED SCRIP MASTER INGESTION ---
 @st.cache_data(ttl=86400)
 def fetch_live_fno_master():
     """Fetches the official Dhan global scrip master file dynamically."""
@@ -45,12 +49,10 @@ def fetch_live_fno_master():
         if response.status_code == 200:
             df_master = pd.read_csv(io.StringIO(response.text))
             
-            # Filter for NSE Equities belonging to the F&O segment list universe
             fno_mask = (df_master['SEM_EXCH_SEGMENT'].str.upper() == 'NSE_EQ') & \
                        (df_master['SEM_INSTRUMENT_NAME'].str.upper() == 'EQUITY') & \
                        (df_master['SEM_SERIES'].str.upper() == 'EQ')
             
-            # Isolate active F&O derivatives instruments dynamically
             fno_symbols = df_master[df_master['SEM_EXCH_SEGMENT'].str.upper() == 'NSE_FO']['SEM_UNDERLYING'].dropna().unique()
             df_filtered = df_master[fno_mask & df_master['SEM_TRADING_SYMBOL'].isin(fno_symbols)]
             
@@ -65,6 +67,51 @@ def fetch_live_fno_master():
     except Exception as e:
         st.error(f"Error establishing automated master scrip sync: {e}")
     return {}
+
+def calculate_supertrend(df, period=7, multiplier=3):
+    """Calculates pure mathematical Supertrend array matching TradingView formulas."""
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    
+    # Calculate True Range and ATR
+    tr1 = high - low
+    tr2 = abs(high - close.shift(1))
+    tr3 = abs(low - close.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.ewm(alpha=1/period, adjust=False).mean()
+    
+    hl2 = (high + low) / 2
+    basic_upperband = hl2 + (multiplier * atr)
+    basic_lowerband = hl2 - (multiplier * atr)
+    
+    final_upperband = pd.Series(0.0, index=df.index)
+    final_lowerband = pd.Series(0.0, index=df.index)
+    supertrend = pd.Series(0.0, index=df.index)
+    direction = pd.Series(1, index=df.index) # 1 for Long, -1 for Short
+    
+    for i in range(1, len(df)):
+        # Upper band logic
+        if basic_upperband.iloc[i] < final_upperband.iloc[i-1] or close.iloc[i-1] > final_upperband.iloc[i-1]:
+            final_upperband.iloc[i] = basic_upperband.iloc[i]
+        else:
+            final_upperband.iloc[i] = final_upperband.iloc[i-1]
+            
+        # Lower band logic
+        if basic_lowerband.iloc[i] > final_lowerband.iloc[i-1] or close.iloc[i-1] < final_lowerband.iloc[i-1]:
+            final_lowerband.iloc[i] = basic_lowerband.iloc[i]
+        else:
+            final_lowerband.iloc[i] = final_lowerband.iloc[i-1]
+            
+        # Direction logic
+        if supertrend.iloc[i-1] == final_upperband.iloc[i-1]:
+            direction.iloc[i] = 1 if close.iloc[i] > final_upperband.iloc[i] else -1
+        else:
+            direction.iloc[i] = -1 if close.iloc[i] < final_lowerband.iloc[i] else 1
+            
+        supertrend.iloc[i] = final_lowerband.iloc[i] if direction.iloc[i] == 1 else final_upperband.iloc[i]
+        
+    return supertrend, direction
 # --- D. APPLICATION RUNTIME ENGINE LOOP ---
 if client_id and access_token:
     dhan = dhanhq(client_id, access_token)
@@ -101,23 +148,23 @@ if client_id and access_token:
                     df['start_Time'] = pd.to_datetime(df['start_Time'])
                     df = df.sort_values(by='start_Time').reset_index(drop=True)
                     
-                    # Technical Indicator calculations
-                    df.ta.rsi(length=14, append=True)
-                    df.ta.macd(fast=12, slow=26, signal=9, append=True)
-                    df.ta.supertrend(period=st_period, multiplier=st_mult, append=True)
+                    # 1. Pure-Python technical vector math execution
+                    rsi_indicator = RSIIndicator(close=df['close'], window=14)
+                    df['RSI_14'] = rsi_indicator.rsi()
                     
-                    rsi_col = 'RSI_14'
-                    macd_col = 'MACD_12_26_9'
-                    macds_col = 'MACDs_12_26_9'
-                    st_dir_col = f'SUPERTd_{st_period}_{float(st_mult)}'
-                    st_line_col = f'SUPERT_{st_period}_{float(st_mult)}'
+                    macd_calc = MACD(close=df['close'], window_fast=12, window_slow=26, window_sign=9)
+                    df['MACD'] = macd_calc.macd()
+                    df['MACD_Signal'] = macd_calc.macd_signal()
+                    
+                    # Compute native supertrend vectors
+                    df['ST_Line'], df['ST_Dir'] = calculate_supertrend(df, period=st_period, multiplier=st_mult)
                     
                     latest = df.iloc[-1]
                     prev = df.iloc[-2]
                     
-                    is_bullish_trend = latest[st_dir_col] == 1
-                    is_fresh_flip = (latest[st_dir_col] == 1) and (prev[st_dir_col] == -1)
-                    macd_cross = latest[macd_col] > latest[macds_col]
+                    is_bullish_trend = latest['ST_Dir'] == 1
+                    is_fresh_flip = (latest['ST_Dir'] == 1) and (prev['ST_Dir'] == -1)
+                    macd_cross = latest['MACD'] > latest['MACD_Signal']
                     
                     if is_fresh_flip:
                         signal_state = "🟢 FRESH GREEN FLIP"
@@ -131,9 +178,9 @@ if client_id and access_token:
                     scanned_matrix_results.append({
                         "Ticker": symbol,
                         "Live Close (Rs)": round(latest['close'], 2),
-                        "RSI (14)": round(latest[rsi_col], 2),
+                        "RSI (14)": round(latest['RSI_14'], 2) if not pd.isna(latest['RSI_14']) else 0.0,
                         "Supertrend State": "Bullish 🟢" if is_bullish_trend else "Bearish 🔴",
-                        "Trailing Stop Line": round(latest[st_line_col], 2),
+                        "Trailing Stop Line": round(latest['ST_Line'], 2),
                         "System Signal": signal_state,
                         "df_ref": df
                     })
@@ -168,7 +215,6 @@ if client_id and access_token:
                 
                 selected_record = next(item for item in scanned_matrix_results if item["Ticker"] == target_scrip)
                 chart_df = selected_record["df_ref"]
-                st_line_str = f'SUPERT_{st_period}_{float(st_mult)}'
                 
                 fig = go.Figure()
                 fig.add_trace(go.Candlestick(
@@ -176,7 +222,7 @@ if client_id and access_token:
                     name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'
                 ))
                 fig.add_trace(go.Scatter(
-                    x=chart_df['start_Time'], y=chart_df[st_line_str], line=dict(color='#38bdf8', width=2, dash='dash'),
+                    x=chart_df['start_Time'], y=chart_df['ST_Line'], line=dict(color='#38bdf8', width=2, dash='dash'),
                     name="Supertrend Line"
                 ))
                 fig.update_layout(template="plotly_dark", height=380, xaxis_rangeslider_visible=False)
