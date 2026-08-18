@@ -19,7 +19,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ SUPERCONFIRM: Swing Trading Command Center")
-st.caption("Live Vector Strategy Engine • Running Precise Live Data via Dhan Security Tokens")
+st.caption("Live Vector Strategy Engine • Running Pure Historical OHLC Streams via Dhan API V2")
 st.divider()
 
 # --- B. CREDENTIAL SIDEBAR PIPELINE ---
@@ -65,7 +65,7 @@ if client_id and access_token:
     dhan_context = DhanContext(client_id, access_token)
     dhan = dhanhq(dhan_context)
     
-    # Absolute Exchange Token IDs required by Dhan API backend to extract authentic data streams
+    # Official Dhan immutable Exchange Security Token IDs for high-volatility underlyings
     live_fno_targets = {
         "RELIANCE": "2885",
         "HDFCBANK": "1333",
@@ -86,26 +86,31 @@ if client_id and access_token:
     
     for idx, symbol in enumerate(active_keys):
         numeric_security_id = live_fno_targets[symbol]
-        status_text.text(f"Extracting Live Market Candles: {symbol} (Security Token ID: {numeric_security_id})...")
+        status_text.text(f"Streaming Real-Time Candlesticks: {symbol} (Security Token ID: {numeric_security_id})...")
         progress_bar.progress((idx + 1) / len(active_keys))
         
         try:
-            # Querying direct live endpoints using mandatory numeric Security IDs
-            raw_ohlc = dhan.historical_daily_data(
-                symbol=numeric_security_id,
-                exchange_segment="NSE_EQ",
-                instrument_type="EQUITY",
-                expiry_code=0,
-                from_date=start_date.strftime("%Y-%m-%d"),
-                to_date=end_date.strftime("%Y-%m-%d")
-            )
+            # --- MANDATORY ENCAPSULATION DICTIONARY FIX ---
+            # Explicitly wrapping the inputs inside a unified payload dictionary parameter
+            api_payload = {
+                "securityId": numeric_security_id,
+                "exchangeSegment": "NSE_EQ",
+                "instrument": "EQUITY",
+                "expiryCode": 0,
+                "oi": False,
+                "fromDate": start_date.strftime("%Y-%m-%d"),
+                "toDate": end_date.strftime("%Y-%m-%d")
+            }
+            
+            # Fire the network request directly using the strict dictionary payload keyword
+            raw_ohlc = dhan.historical_daily_data(data=api_payload)
             
             if raw_ohlc and 'data' in raw_ohlc and len(raw_ohlc['data']) > 20:
                 df = pd.DataFrame(raw_ohlc['data'])
                 df['start_Time'] = pd.to_datetime(df['start_Time'])
                 df = df.sort_values(by='start_Time').reset_index(drop=True)
                 
-                # Run complete math engine loops across live values
+                # Run math indicator engine matrices
                 df['RSI_14'] = RSIIndicator(close=df['close'], window=14).rsi()
                 macd_calc = MACD(close=df['close'], window_fast=12, window_slow=26, window_sign=9)
                 df['MACD'] = macd_calc.macd()
