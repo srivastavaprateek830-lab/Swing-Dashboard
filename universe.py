@@ -14,46 +14,55 @@ def _download_master():
 def load_master():
     if not CACHE.exists():
         _download_master()
-    try:
-        df = pd.read_csv(CACHE, low_memory=False)
-        if len(df) < 1000:
-            _download_master()
-            df = pd.read_csv(CACHE, low_memory=False)
-        return df
-    except Exception:
-        _download_master()
-        return pd.read_csv(CACHE, low_memory=False)
+    df = pd.read_csv(CACHE, low_memory=False)
+
+    # Dhan's detailed master uses NSE/D/E for NSE derivatives and
+    # NSE/E for NSE equity. Use UNDERLYING_SECURITY_ID rather than matching
+    # symbol strings; this is much more robust.
+    return df
 
 def load_fno_universe():
     df = load_master()
 
-    # Derive F&O underlyings from current NSE_FNO instruments.
-    fno = df[
-        (df["EXCH_ID"].astype(str) == "NSE") &
-        (df["SEGMENT"].astype(str) == "D")
+    required = {"EXCH_ID","SEGMENT","SECURITY_ID","INSTRUMENT"}
+    missing = required - set(df.columns)
+    if missing:
+        raise RuntimeError(f"Dhan instrument master missing columns: {sorted(missing)}")
+
+    nse_fno = df[
+        (df["EXCH_ID"].astype(str).str.upper() == "NSE") &
+        (df["SEGMENT"].astype(str).str.upper() == "D")
     ].copy()
 
-    symbols = set(
-        fno["UNDERLYING_SYMBOL"].dropna().astype(str).str.upper().str.strip()
+    # Stock F&O underlyings have an UNDERLYING_SECURITY_ID. Index derivatives
+    # such as NIFTY/BANKNIFTY do not map to an NSE_EQ stock and are excluded.
+    underlying_ids = set(
+        nse_fno["UNDERLYING_SECURITY_ID"]
+        .dropna()
+        .astype(str)
+        .str.replace(r"\.0$", "", regex=True)
     )
 
     eq = df[
-        (df["EXCH_ID"].astype(str) == "NSE") &
-        (df["SEGMENT"].astype(str) == "E") &
-        (df["INSTRUMENT"].astype(str).str.upper() == "EQUITY")
+        (df["EXCH_ID"].astype(str).str.upper() == "NSE") &
+        (df["SEGMENT"].astype(str).str.upper() == "E")
     ].copy()
 
-    eq["symbol_key"] = eq["SYMBOL_NAME"].astype(str).str.upper().str.strip()
-    eq = eq[eq["symbol_key"].isin(symbols)].copy()
+    eq_ids = eq["SECURITY_ID"].astype(str).str.replace(r"\.0$", "", regex=True)
+    eq = eq[eq_ids.isin(underlying_ids)].copy()
 
-    # Prefer one cash equity security ID per underlying.
-    eq = eq.drop_duplicates("symbol_key")
+    # Keep equity instruments only where possible; exclude ETFs, indices, etc.
+    if "INSTRUMENT" in eq.columns:
+        eq = eq[eq["INSTRUMENT"].astype(str).str.upper().eq("EQUITY")]
+
+    name_col = "SYMBOL_NAME" if "SYMBOL_NAME" in eq.columns else "DISPLAY_NAME"
+    eq["symbol"] = eq[name_col].astype(str).str.upper().str.strip()
+    eq["security_id"] = eq["SECURITY_ID"].astype(str).str.replace(r"\.0$", "", regex=True)
+
+    eq = eq.drop_duplicates("security_id").sort_values("symbol")
 
     return [
-        {
-            "symbol": row["symbol_key"],
-            "security_id": str(row["SECURITY_ID"]),
-        }
+        {"symbol": row["symbol"], "security_id": row["security_id"]}
         for _, row in eq.iterrows()
-        if str(row["SECURITY_ID"]).strip() not in ("", "nan")
+        if row["symbol"] not in ("NAN", "") and row["security_id"] not in ("NAN", "")
     ]
