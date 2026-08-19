@@ -73,19 +73,31 @@ refresh_rate = st.sidebar.slider("AUTO REFRESH (SEC)", min_value=2, max_value=30
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔐 DHAN LIVE TERMINAL AUTH")
 
-# Check if keys exist in Streamlit Secrets Settings first, otherwise fall back to empty strings
-default_client_id = st.secrets.get("DHAN_CLIENT_ID", "")
-default_access_token = st.secrets.get("DHAN_ACCESS_TOKEN", "")
+# 1. Look for lowercase keys first, fallback to uppercase variations if needed
+client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
+access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
 
-# Display input boxes pre-filled with secrets if they exist
-client_id = st.sidebar.text_input("DHAN CLIENT ID", type="password", value=default_client_id)
-access_token = st.sidebar.text_input("ACCESS TOKEN", type="password", value=default_access_token)
+# Show masked configuration status flags in your sidebar dashboard layout
+if client_id and access_token:
+    st.sidebar.success("✅ VAULT CREDENTIALS ACTIVE")
+else:
+    st.sidebar.error("❌ VAULT CREDENTIALS MISSING")
+    # Provide manual backup options inside the UI if keys aren't found in Secrets yet
+    client_id = st.sidebar.text_input("MANUAL CLIENT ID", type="password", value=str(client_id))
+    access_token = st.sidebar.text_input("MANUAL ACCESS TOKEN", type="password", value=str(access_token))
 
 # Map selector parameters to exact structural Dhan criteria tokens
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
-# Initialize live client integration
-dhan = dhanhq(client_id, access_token)
+# 2. Defensive Client Initialization Engine Wrapper to Stop Crashes
+dhan = None
+if client_id and access_token and str(client_id).strip() != "" and str(access_token).strip() != "":
+    try:
+        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
+    except Exception as init_err:
+        st.sidebar.warning(f"AUTH ENGINE WARN: {str(init_err)}")
+else:
+    st.sidebar.warning("⚠️ RUNNING IN LOCAL SIMULATOR MODE")
 
 # ==========================================
 # 4. MATH & ENGINE DATA LOGIC FUNCTIONS
@@ -186,7 +198,6 @@ def evaluate_stock(symbol, cur, prev):
         "Bull_Action": bull_action, "Bear_Action": bear_action,
         "Trend": "▲" if cur['ST_Direction'] == 1 else "▼"
     }
-
 
 def fetch_live_market_data():
     """
