@@ -72,8 +72,14 @@ refresh_rate = st.sidebar.slider("AUTO REFRESH (SEC)", min_value=2, max_value=30
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔐 DHAN LIVE TERMINAL AUTH")
-client_id = st.sidebar.text_input("DHAN CLIENT ID", type="password", value="1000000000")
-access_token = st.sidebar.text_input("ACCESS TOKEN", type="password", value="eyJhbGciOi...")
+
+# Check if keys exist in Streamlit Secrets Settings first, otherwise fall back to empty strings
+default_client_id = st.secrets.get("DHAN_CLIENT_ID", "")
+default_access_token = st.secrets.get("DHAN_ACCESS_TOKEN", "")
+
+# Display input boxes pre-filled with secrets if they exist
+client_id = st.sidebar.text_input("DHAN CLIENT ID", type="password", value=default_client_id)
+access_token = st.sidebar.text_input("ACCESS TOKEN", type="password", value=default_access_token)
 
 # Map selector parameters to exact structural Dhan criteria tokens
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
@@ -103,7 +109,7 @@ def calculate_indicators(df):
     df['atr'] = tr.rolling(window=14).mean()
     df['ATR_Pct'] = (df['atr'] / df['close']) * 100
     
-    # Core Mathematical Trend Overlays
+    # Core Moving Averages & RSI
     df['EMA20'] = df['close'].ewm(span=20, adjust=False).mean()
     df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
     
@@ -139,7 +145,6 @@ def evaluate_stock(symbol, cur, prev):
     close, r20, r60, rvol, atrp, rsi = cur['close'], cur['20D_Return'], cur['60D_Return'], cur['RVOL'], cur['ATR_Pct'], cur['RSI']
     macd, msig, pmacd, pmsig = cur['MACD'], cur['MACD_Sig'], prev['MACD'], prev['MACD_Sig']
     
-    # Real calculations matching standard exchange tracking values
     ltp = close
     prev_close = prev['close']
     chg = ltp - prev_close
@@ -171,7 +176,6 @@ def evaluate_stock(symbol, cur, prev):
     fresh_macd_bull = (pmacd <= pmsig) and (macd > msig)
     fresh_macd_bear = (pmacd >= pmsig) and (macd < msig)
     
-    # Dynamic criteria confirmation parameters matching the user checklist
     bull_action = "BUY" if (rsi < 45 and fresh_macd_bull and rvol > 1.3 and cur['ST_Direction'] == 1) else "WAIT"
     bear_action = "SELL" if (rsi > 55 and fresh_macd_bear and rvol > 1.3 and cur['ST_Direction'] == -1) else "WAIT"
 
@@ -182,6 +186,8 @@ def evaluate_stock(symbol, cur, prev):
         "Bull_Action": bull_action, "Bear_Action": bear_action,
         "Trend": "▲" if cur['ST_Direction'] == 1 else "▼"
     }
+
+
 def fetch_live_market_data():
     """
     Connects to the Dhan Data API using active access tokens to retrieve 
