@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 from datetime import datetime, timedelta
-import pytz  # Handles precise Indian Standard Time (IST) synchronization
+import pytz  # Handles precise synchronization with Indian Standard Time (IST)
 from dhanhq import DhanContext, dhanhq  # Official Dhan Connect Gateway components
 
 # ==========================================
-# 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
+# 1. PAGE CONFIG & TERMINAL CSS STYLING
 # ==========================================
 st.set_page_config(
     page_title="FnO Daily Swing Momentum Terminal",
@@ -15,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom injection for retro terminal font system, low-padding cells, and tight visual framing
+# Custom injection for retro terminal micro monospace typography, clean grid structures, and sharp cell alignments
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
@@ -35,34 +34,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. OFFICIAL INSTRUMENT RECONCILIATION
+# 2. INSTRUMENT REGISTRY WITH OFFICIAL DHAN SECURITY IDs
 # ==========================================
 STOCKS_UNIVERSE = {
-    "RELIANCE": {"id": "2885", "sym": "RELIANCE"}, "HDFCBANK": {"id": "1333", "sym": "HDFCBANK"}, 
-    "ICICIBANK": {"id": "4963", "sym": "ICICIBANK"}, "SBIN": {"id": "3045", "sym": "SBIN"}, 
-    "AXISBANK": {"id": "5900", "sym": "AXISBANK"}, "KOTAKBANK": {"id": "1922", "sym": "KOTAKBANK"}, 
-    "BAJFINANCE": {"id": "317", "sym": "BAJFINANCE"}, "BAJAJFINSV": {"id": "16675", "sym": "BAJAJFINSV"}, 
-    "SHRIRAMFIN": {"id": "3232", "sym": "SHRIRAMFIN"}, "LT": {"id": "11483", "sym": "LT"}, 
-    "BHARTIARTL": {"id": "10604", "sym": "BHARTIARTL"}, "INFY": {"id": "1594", "sym": "INFY"}, 
-    "TCS": {"id": "11536", "sym": "TCS"}, "HCLTECH": {"id": "7229", "sym": "HCLTECH"}, 
-    "TATAMOTORS": {"id": "3456", "sym": "TATAMOTORS"}, "M&M": {"id": "2031", "sym": "M&M"}, 
-    "MARUTI": {"id": "10999", "sym": "MARUTI"}, "EICHERMOT": {"id": "910", "sym": "EICHERMOT"}, 
-    "TVSMOTOR": {"id": "8424", "sym": "TVSMOTOR"}, "HEROMOTOCO": {"id": "1348", "sym": "HEROMOTOCO"}, 
-    "ADANIENT": {"id": "25", "sym": "ADANIENT"}, "ADANIPORTS": {"id": "15083", "sym": "ADANIPORTS"}, 
-    "BEL": {"id": "383", "sym": "BEL"}, "HAL": {"id": "2303", "sym": "HAL"}, 
-    "TRENT": {"id": "1964", "sym": "TRENT"}, "POWERGRID": {"id": "14977", "sym": "POWERGRID"}, 
-    "NTPC": {"id": "11630", "sym": "NTPC"}, "COALINDIA": {"id": "20374", "sym": "COALINDIA"}, 
-    "ONGC": {"id": "2475", "sym": "ONGC"}, "BPCL": {"id": "526", "sym": "BPCL"}, 
-    "TATASTEEL": {"id": "3499", "sym": "TATASTEEL"}, "JSWSTEEL": {"id": "11723", "sym": "JSWSTEEL"}, 
-    "HINDALCO": {"id": "1363", "sym": "HINDALCO"}, "VEDL": {"id": "3063", "sym": "VEDL"}, 
-    "JINDALSTEL": {"id": "6733", "sym": "JINDALSTEL"}, "SUNPHARMA": {"id": "3351", "sym": "SUNPHARMA"}, 
-    "CIPLA": {"id": "694", "sym": "CIPLA"}, "DRREDDY": {"id": "881", "sym": "DRREDDY"}, 
-    "TECHM": {"id": "13538", "sym": "TECHM"}, "WIPRO": {"id": "3787", "sym": "WIPRO"}, 
-    "LTIM": {"id": "17818", "sym": "LTIM"}, "PERSISTENT": {"id": "18365", "sym": "PERSISTENT"}, 
-    "COFORGE": {"id": "11543", "sym": "COFORGE"}, "DIXON": {"id": "21690", "sym": "DIXON"}, 
-    "INDIGO": {"id": "11195", "sym": "INDIGO"}, "ASHOKLEY": {"id": "212", "sym": "ASHOKLEY"}, 
-    "BHEL": {"id": "438", "sym": "BHEL"}, "IOC": {"id": "1624", "sym": "IOC"}, 
-    "VOLTAS": {"id": "3718", "sym": "VOLTAS"}, "ETERNAL": {"id": "14416", "sym": "BERGEPAINT"}
+    "RELIANCE": {"id": 2885, "sym": "RELIANCE"}, "HDFCBANK": {"id": 1333, "sym": "HDFCBANK"}, 
+    "ICICIBANK": {"id": 4963, "sym": "ICICIBANK"}, "SBIN": {"id": 3045, "sym": "SBIN"}, 
+    "AXISBANK": {"id": 5900, "sym": "AXISBANK"}, "KOTAKBANK": {"id": 1922, "sym": "KOTAKBANK"}, 
+    "BAJFINANCE": {"id": 317, "sym": "BAJFINANCE"}, "BAJAJFINSV": {"id": 16675, "sym": "BAJAJFINSV"}, 
+    "SHRIRAMFIN": {"id": 3232, "sym": "SHRIRAMFIN"}, "LT": {"id": 11483, "sym": "LT"}, 
+    "BHARTIARTL": {"id": 10604, "sym": "BHARTIARTL"}, "INFY": {"id": 1594, "sym": "INFY"}, 
+    "TCS": {"id": 11536, "sym": "TCS"}, "HCLTECH": {"id": 7229, "sym": "HCLTECH"}, 
+    "TATAMOTORS": {"id": 3456, "sym": "TATAMOTORS"}, "M&M": {"id": 2031, "sym": "M&M"}, 
+    "MARUTI": {"id": 10999, "sym": "MARUTI"}, "EICHERMOT": {"id": 910, "sym": "EICHERMOT"}, 
+    "TVSMOTOR": {"id": 8424, "sym": "TVSMOTOR"}, "HEROMOTOCO": {"id": 1348, "sym": "HEROMOTOCO"}, 
+    "ADANIENT": {"id": 25, "sym": "ADANIENT"}, "ADANIPORTS": {"id": 15083, "sym": "ADANIPORTS"}, 
+    "BEL": {"id": 383, "sym": "BEL"}, "HAL": {"id": 2303, "sym": "HAL"}, 
+    "TRENT": {"id": 1964, "sym": "TRENT"}, "POWERGRID": {"id": 14977, "sym": "POWERGRID"}, 
+    "NTPC": {"id": 11630, "sym": "NTPC"}, "COALINDIA": {"id": 20374, "sym": "COALINDIA"}, 
+    "ONGC": {"id": 2475, "sym": "ONGC"}, "BPCL": {"id": 526, "sym": "BPCL"}, 
+    "TATASTEEL": {"id": 3499, "sym": "TATASTEEL"}, "JSWSTEEL": {"id": 11723, "sym": "JSWSTEEL"}, 
+    "HINDALCO": {"id": 1363, "sym": "HINDALCO"}, "VEDL": {"id": 3063, "sym": "VEDL"}, 
+    "JINDALSTEL": {"id": 6733, "sym": "JINDALSTEL"}, "SUNPHARMA": {"id": 3351, "sym": "SUNPHARMA"}, 
+    "CIPLA": {"id": 694, "sym": "CIPLA"}, "DRREDDY": {"id": 881, "sym": "DRREDDY"}, 
+    "TECHM": {"id": 13538, "sym": "TECHM"}, "WIPRO": {"id": 3787", "sym": "WIPRO"}, 
+    "LTIM": {"id": 17818, "sym": "LTIM"}, "PERSISTENT": {"id": 18365, "sym": "PERSISTENT"}, 
+    "COFORGE": {"id": 11543, "sym": "COFORGE"}, "DIXON": {"id": 21690, "sym": "DIXON"}, 
+    "INDIGO": {"id": 11195, "sym": "INDIGO"}, "ASHOKLEY": {"id": 212, "sym": "ASHOKLEY"}, 
+    "BHEL": {"id": 438", "sym": "BHEL"}, "IOC": {"id": 1624", "sym": "IOC"}, 
+    "VOLTAS": {"id": 3718, "sym": "VOLTAS"}, "ETERNAL": {"id": 14416, "sym": "BERGEPAINT"}
 }
 
 if "stored_data" not in st.session_state:
@@ -73,7 +72,8 @@ if "trade_states" not in st.session_state:
 # 3. SIDEBAR PARAMETERS & AUTH CONTROLS
 # ==========================================
 st.sidebar.markdown("### 📊 WORKSTATION CONFIG")
-st.sidebar.info("INTERVAL FIXED: 1D (DAILY CONTEXT)\nREFRESH: EXCLUSIVELY MANUAL")
+timeframe_sel = st.sidebar.selectbox("TIMEFRAME SELECT", ["1D", "4HR", "1HR"])
+st.sidebar.info("REFRESH: EXCLUSIVELY MANUAL")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔐 DHAN SECURE INSTANTIATION")
@@ -81,20 +81,21 @@ st.sidebar.markdown("### 🔐 DHAN SECURE INSTANTIATION")
 client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
 access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
 
-# Explicit single context object mapping to pass parameters safely to the constructor
+DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
+
 dhan = None
 if client_id and access_token:
     try:
         dhan_context = DhanContext(client_id=str(client_id).strip(), access_token=str(access_token).strip())
         dhan = dhanhq(dhan_context)
-        st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
+        st.sidebar.success("✅ DHAN LIVE EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"AUTHENTICATION FAULT: {str(init_err)}")
 else:
     st.sidebar.error("❌ VAULT APP SECRETS ARE NOT CONFIGURED")
 
 # ==========================================
-# 4. MATH & HYSTERESIS STATE LOGIC ENGINE
+# 4. MATH & ENGINE DATA LOGIC FUNCTIONS
 # ==========================================
 def calculate_indicators(df):
     if df.empty or len(df) < 30:
@@ -153,13 +154,11 @@ def evaluate_stock(symbol, cur, prev):
     # 🟢 BULLISH POSITION LOCK SYSTEM (HYSTERESIS)
     # ==========================================
     if past_state["bull"] == "BUY":
-        # Keep holding signal green on BUY until price explicitly closes below Supertrend line
         if close < cur['Supertrend'] or cur['ST_Direction'] == -1:
             bull_action = "WAIT"
         else:
             bull_action = "BUY"
     else:
-        # STRATEGY ENTRY CHECK: Triggers only when all conditions align perfectly
         if rsi < 30 and fresh_macd_bull and rvol > 1.5 and close > cur['Supertrend']:
             bull_action = "BUY"
         else:
@@ -169,13 +168,11 @@ def evaluate_stock(symbol, cur, prev):
     # 🔴 BEARISH POSITION LOCK SYSTEM (HYSTERESIS)
     # ==========================================
     if past_state["bear"] == "SELL":
-        # Keep short trade active until price closes back above Supertrend line
         if close > cur['Supertrend'] or cur['ST_Direction'] == 1:
             bear_action = "WAIT"
         else:
             bear_action = "SELL"
     else:
-        # STRATEGY ENTRY CHECK: Triggers short execution on criteria breakout
         if rsi > 70 and fresh_macd_bear and rvol > 1.5 and close < cur['Supertrend']:
             bear_action = "SELL"
         else:
@@ -192,20 +189,23 @@ def evaluate_stock(symbol, cur, prev):
 def fetch_authentic_dhan_data():
     results = []
     
-    # Validation check: If the API context failed to boot, halt immediately
     if dhan is None:
-        st.error("🚨 DHAN ENGINE DISCONNECTED. VERIFY CLIENT PARAMS INSIDE STORAGE VAULT.")
+        st.error("🚨 DHAN ENGINE DISCONNECTED. CHECK YOUR STORAGE VAULT CREDS.")
         return pd.DataFrame()
         
+    # Setup troubleshooting visual logger container inside the UI frame
+    error_container = st.empty()
+    logged_errors = []
+    
     for key, data in STOCKS_UNIVERSE.items():
         sec_id = data["id"]
         symbol_lbl = data["sym"]
         
         try:
-            # FIXED: Aligned the variable references cleanly with timeframe_sel selector strings
+            # FIXED: Converted exchange segment key string and forced historical integer tracking parameters
             raw_data = dhan.get_historical_data(
-                security_id=str(sec_id),
-                exchange_segment="NSE_EQ",
+                security_id=int(sec_id),
+                exchange_segment="NSE",
                 instrument_type="EQUITY",
                 expiry_code=0,
                 from_date=(datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
@@ -215,29 +215,40 @@ def fetch_authentic_dhan_data():
             
             if raw_data and raw_data.get('status') == 'success' and 'data' in raw_data:
                 candles = raw_data['data']
+                df = pd.DataFrame(candles)
                 
-                # Dynamic type tracker to process dictionary arrays or pure nested lists
-                if len(candles) > 0 and isinstance(candles, dict):
-                    df = pd.DataFrame(candles)
-                else:
+                if 'close' not in df.columns and len(candles) > 0:
                     df = pd.DataFrame(candles, columns=['open', 'high', 'low', 'close', 'volume', 'timestamp'])
+                
+                if timeframe_sel == "4HR":
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    df = df.resample('4H', on='timestamp').agg({
+                        'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
+                    }).dropna().reset_index()
                 
                 cur, prev = calculate_indicators(df)
                 if cur is not None:
                     results.append(evaluate_stock(symbol_lbl, cur, prev))
-        except Exception as e:
-            pass
+            else:
+                msg = raw_data.get('remarks') if raw_data else "No Response Received"
+                logged_errors.append(f"{symbol_lbl}: {msg}")
+        except Exception as request_fault:
+            logged_errors.append(f"{symbol_lbl} Crash: {str(request_fault)}")
+            
+    if logged_errors:
+        with error_container.expander("⚠️ VIEW ENGINE DIAGNOSTIC ERROR STREAM LOGS"):
+            st.code("\n".join(logged_errors))
             
     return pd.DataFrame(results)
 
 # ==========================================
-# 5. TERMINAL GRID LAYOUT RENDERER
+# 5. RENDER SYSTEM INTERFACE
 # ==========================================
 ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
-st.caption("CONNECTED MODE: SECURE ACTIVE DHAN FEED | TIME CONTEXT: DAILY BARS")
+st.caption(f"CONNECTED MODE: ACTIVE DHAN API | TIME CONTEXT: {timeframe_sel} SEC_FEED")
 
 st.markdown("---")
 
@@ -245,12 +256,10 @@ col_meta, col_btn = st.columns(2)
 with col_meta:
     st.markdown(f"<p style='color:#666666; font-size:12px; padding-top:14px;'>LAST WORKSTATION EXCHANGE SWEEP (IST): {ist_now.strftime('%d-%b-%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
 with col_btn:
-    # Clicking this button runs the loop through the verified data keys
     trigger_refresh = st.button("RUN LIVE ENGINE SWEEP 🔄", use_container_width=True)
 
-# Process loop when session storage is empty or when the button is clicked
 if st.session_state.stored_data is None or trigger_refresh:
-    with st.spinner("COMMUNICATING DIRECTLY WITH DHAN EXCHANGE SERVERS..."):
+    with st.spinner("FETCHING TRUE DHAN EXCHANGE DATASTREAMS..."):
         fetched_matrix = fetch_authentic_dhan_data()
         if not fetched_matrix.empty:
             st.session_state.stored_data = fetched_matrix
