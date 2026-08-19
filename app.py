@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime, timedelta
-import pytz  # Native timezone handler for strict Indian Standard Time synchronization
+import pytz  # Handles native Indian Standard Time synchronization
 from dhanhq import dhanhq  # Official Dhan Connect Gateway
 
 # ==========================================
@@ -27,8 +27,8 @@ st.markdown("""
         .terminal-table td { padding: 4px 6px; border-bottom: 1px solid #161616; }
         .txt-bull { color: #00FF66 !important; font-weight: bold; }
         .txt-bear { color: #FF3344 !important; font-weight: bold; }
-        .txt-wait { color: #555555 !important; }
-        .txt-gray { color: #444444 !important; }
+        .txt-wait { color: #444444 !important; }
+        .txt-gray { color: #555555 !important; }
         div.stButton > button { background-color: #1A1A1A !important; color: #FFFFFF !important; border: 1px solid #333333 !important; font-size: 11px !important; border-radius: 0px !important; }
         div.stButton > button:hover { border-color: #00FF66 !important; color: #00FF66 !important; }
     </style>
@@ -79,11 +79,11 @@ access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_T
 
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
-# FIXED: Replaced positional signatures with direct keyword configuration arguments to fulfill SDK criteria
+# FIXED: Swapped out keyword arguments for explicit positional strings required by Dhan's client module
 dhan = None
 if client_id and access_token:
     try:
-        dhan = dhanhq(client_id=str(client_id).strip(), token=str(access_token).strip())
+        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
         st.sidebar.success("✅ DHAN LIVE EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"ENGINE CRITICAL ERROR: {str(init_err)}")
@@ -97,15 +97,15 @@ def calculate_indicators(df):
     if df.empty or len(df) < 65:
         return None, None
     
-    # 20-Day and 60-Day Price Momentum
+    # Momentum Returns
     df['20D_Return'] = (df['close'] - df['close'].shift(20)) / df['close'].shift(20) * 100
     df['60D_Return'] = (df['close'] - df['close'].shift(60)) / df['close'].shift(60) * 100
     
-    # Relative Volume (RVOL) 
+    # Relative Volume
     df['avg_vol'] = df['volume'].rolling(window=20).mean()
     df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # Average True Range (ATR) & ATR % Calculation
+    # True Range & ATR
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift(1)).abs()
     low_cp = (df['low'] - df['close'].shift(1)).abs()
@@ -113,23 +113,23 @@ def calculate_indicators(df):
     df['atr'] = tr.rolling(window=14).mean()
     df['ATR_Pct'] = (df['atr'] / (df['close'] + 1e-9)) * 100
     
-    # Moving Averages (EMA 20 & EMA 50)
+    # Overlays
     df['EMA20'] = df['close'].ewm(span=20, adjust=False).mean()
     df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
     
-    # Relative Strength Index (RSI)
+    # RSI Engine
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-9))))
     
-    # Moving Average Convergence Divergence (MACD)
+    # Convergence Lines
     ema12 = df['close'].ewm(span=12, adjust=False).mean()
     ema26 = df['close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Sig'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
-    # Supertrend Trend Core Formulation (7, 3.0 window multiplier)
+    # Supertrend Trend Core (7, 3.0 window multiplier)
     hl2 = (df['high'] + df['low']) / 2
     upper = hl2 + (3.0 * df['atr'])
     lower = hl2 - (3.0 * df['atr'])
@@ -155,9 +155,7 @@ def evaluate_stock(symbol, cur, prev):
     chg = ltp - prev_close
     chg_pct = (chg / prev_close) * 100
 
-    # ==========================================
-    # 100-POINT MOMENTUM ALLOCATION SYSTEM
-    # ==========================================
+    # 100-Point Scoring Rules
     bull_score, bear_score = 0, 0
     if r20 > 0: bull_score += 20
     else: bear_score += 20
@@ -175,13 +173,10 @@ def evaluate_stock(symbol, cur, prev):
     else: bear_score += 5
     if cur['turnover'] > cur['avg_turnover']: bull_score += 5; bear_score += 5
 
-    # ==========================================
-    # STRATEGY CONDITIONAL SIGNAL CONFIRMATION
-    # ==========================================
+    # Strategy Rules Check List Verification
     fresh_macd_bull = (pmacd <= pmsig) and (macd > msig)
     fresh_macd_bear = (pmacd >= pmsig) and (macd < msig)
     
-    # Applied your strict checklist sequencing model across parameters
     bull_action = "BUY" if (rsi < 45 and fresh_macd_bull and rvol > 1.3 and cur['ST_Direction'] == 1) else "WAIT"
     bear_action = "SELL" if (rsi > 55 and fresh_macd_bear and rvol > 1.3 and cur['ST_Direction'] == -1) else "WAIT"
 
@@ -199,7 +194,6 @@ def fetch_live_market_data():
         sec_id = data["id"] if isinstance(data, dict) else data
         symbol_lbl = data["sym"] if isinstance(data, dict) else key
         
-        # Pull authentic historical bars only when the Dhan link parameters initialize cleanly
         if dhan is not None:
             try:
                 raw_data = dhan.get_historical_data(
@@ -229,14 +223,14 @@ def fetch_live_market_data():
             except Exception:
                 pass
         
-        # Real-Time Mathematical Loop: Active ONLY when server token handshakes are blocked or throttled
+        # Real-time Simulation Engine: Active ONLY when API keys are blank or rate-limited
         np.random.seed(int(time.time() * 10) % 4294967295 + abs(hash(key)) % 500)
         close_p = np.random.uniform(200, 3500)
         chg_val = np.random.uniform(-4, 4)
         
-        # Simulating random breakouts to test action tab floating rules
+        # Generate varied states to ensure valid signal testing
         sim_rsi = np.random.uniform(15, 85)
-        sim_macd_cross = np.random.choice([True, False], p=[0.15, 0.85]) # 15% probability for a live entry setup
+        sim_macd_cross = np.random.choice([True, False], p=[0.25, 0.75])  # Increased probability for validation
         sim_direction = 1 if chg_val > 0 else -1
         
         bull_act = "BUY" if (sim_rsi < 45 and sim_macd_cross and sim_direction == 1) else "WAIT"
@@ -280,8 +274,8 @@ grid_left, grid_right = st.columns(2)
 def run_screener_loop():
     raw_matrix = fetch_live_market_data()
     
-    # FIXED: Re-engineered priority matrix sorting. 
-    # Confirmed 'BUY' and 'SELL' signals override standard scoring rows to automatically float to index rank #1.
+    # FIXED: Pinned Floating Row Sorter. 
+    # Confirmed 'BUY' and 'SELL' actions completely override the numerical score to float straight to row 1.
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "Bull_Score", "CHG_Pct"], ascending=[True, False, False]).reset_index(drop=True)
     bull_df.index += 1
