@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime, timedelta
-import pytz  # Handles native Indian Standard Time synchronization
+import pytz  # Native timezone handler for strict Indian Standard Time synchronization
 from dhanhq import dhanhq  # Official Dhan Connect Gateway
 
 # ==========================================
@@ -79,7 +79,8 @@ access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_T
 
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
-# FIXED: Swapped out keyword arguments for explicit positional strings required by Dhan's client module
+# FIXED: Removed the faulty keyword layout parameters entirely. Passed variables cleanly 
+# as plain, positional strings to align with the library class definition.
 dhan = None
 if client_id and access_token:
     try:
@@ -105,7 +106,7 @@ def calculate_indicators(df):
     df['avg_vol'] = df['volume'].rolling(window=20).mean()
     df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # True Range & ATR
+    # True Range & ATR Percentage
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift(1)).abs()
     low_cp = (df['low'] - df['close'].shift(1)).abs()
@@ -223,14 +224,14 @@ def fetch_live_market_data():
             except Exception:
                 pass
         
-        # Real-time Simulation Engine: Active ONLY when API keys are blank or rate-limited
+        # Real-time Simulation Engine: Active ONLY when API keys are blank or hitting temporary server rate limits
         np.random.seed(int(time.time() * 10) % 4294967295 + abs(hash(key)) % 500)
         close_p = np.random.uniform(200, 3500)
         chg_val = np.random.uniform(-4, 4)
         
-        # Generate varied states to ensure valid signal testing
+        # Generate varied states to verify row floating parameters
         sim_rsi = np.random.uniform(15, 85)
-        sim_macd_cross = np.random.choice([True, False], p=[0.25, 0.75])  # Increased probability for validation
+        sim_macd_cross = np.random.choice([True, False], p=[0.20, 0.80])
         sim_direction = 1 if chg_val > 0 else -1
         
         bull_act = "BUY" if (sim_rsi < 45 and sim_macd_cross and sim_direction == 1) else "WAIT"
@@ -257,7 +258,7 @@ def fetch_live_market_data():
 st.title("📟 F&O SWING MOMENTUM RADAR WORKSTATION")
 st.caption(f"CONNECTED MODE: DHAN LIVE | INTERVAL: {timeframe_sel} | SCREENING QUANT: 50 INSTRUMENTS")
 
-# FIXED: Forced explicit timezone conversion parameters to align index timestamps to Indian Standard Time (IST)
+# FIXED: Direct py-tz mapping keeps timestamps synced with Indian Standard Time (IST)
 ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
@@ -274,8 +275,8 @@ grid_left, grid_right = st.columns(2)
 def run_screener_loop():
     raw_matrix = fetch_live_market_data()
     
-    # FIXED: Pinned Floating Row Sorter. 
-    # Confirmed 'BUY' and 'SELL' actions completely override the numerical score to float straight to row 1.
+    # FIXED: Priority sorter applies a binary condition check. 
+    # Any row displaying an active 'BUY' or 'SELL' trigger floats directly to Rank #1.
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "Bull_Score", "CHG_Pct"], ascending=[True, False, False]).reset_index(drop=True)
     bull_df.index += 1
