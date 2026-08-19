@@ -1,6 +1,6 @@
 streamlit>=1.35.0
-pandas>=2.0.0
-numpy>=1.24.0
-scipy>=1.10.0
-git+https://github.com
+pandas
+numpy
+scipy
+git+https://github.com/twopirllc/pandas-ta.git@development
 dhanhq
