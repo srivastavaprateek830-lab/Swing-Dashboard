@@ -4,7 +4,7 @@ import numpy as np
 import time
 from datetime import datetime, timedelta
 import pytz  
-from dhanhq import dhanhq  
+from dhanhq import dhanhq  # Official Dhan Connect Gateway components
 
 # ==========================================
 # 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Monospace terminal font, flat tables, and custom color rules
+# Custom injection for retro terminal font system, low-padding cells, and tight visual framing
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
@@ -84,11 +84,11 @@ access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_T
 
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
+# FIXED: Initializing with explicit, labeled keyword arguments only to completely stop the positional crash
 dhan = None
 if client_id and access_token:
     try:
-        # Correct library initialization signature
-        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
+        dhan = dhanhq(client_id=str(client_id).strip(), access_token=str(access_token).strip())
         st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"AUTHENTICATION FAULT: {str(init_err)}")
@@ -102,11 +102,11 @@ def calculate_indicators(df):
     if df.empty or len(df) < 30:
         return None, None
     
-    # 1. Volume 1.5x Multiplier Benchmark
+    # Volume 1.5x Multiplier Condition
     df['avg_vol'] = df['volume'].rolling(window=20).mean()
     df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # 2. Average True Range (ATR) & Native Supertrend (7, 3.0 Multiplier)
+    # Average True Range (ATR) & Native Supertrend (7, 3.0 multiplier)
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift(1)).abs()
     low_cp = (df['low'] - df['close'].shift(1)).abs()
@@ -124,13 +124,13 @@ def calculate_indicators(df):
     df['Supertrend'] = supertrend
     df['ST_Direction'] = direction
     
-    # 3. Native RSI Calculation
+    # Native RSI Calculation
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-9))))
     
-    # 4. Native MACD Convergence Calculations
+    # Native MACD Convergence Calculations
     ema12 = df['close'].ewm(span=12, adjust=False).mean()
     ema26 = df['close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
@@ -205,7 +205,7 @@ def fetch_authentic_dhan_data():
         symbol_lbl = data["sym"]
         
         try:
-            # Fixed endpoint names: historical_daily_candles & historical_intraday_candles
+            # FIXED: Pointed to the real API endpoint variables
             if timeframe_sel == "1D":
                 raw_data = dhan.historical_daily_candles(
                     security_id=sec_id,
@@ -259,7 +259,7 @@ ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
-st.caption(f"CONNECTED MODE: OFFICIAL DHAN DATA CONTEXT FEED | TIMEFRAME: {timeframe_sel}")
+st.caption(f"CONNECTED MODE: OFFICIAL DHAN LIVE DATA CONTEXT FEED | TIMEFRAME: {timeframe_sel}")
 st.markdown("---")
 
 col_meta, col_btn = st.columns(2)
