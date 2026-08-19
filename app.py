@@ -4,7 +4,7 @@ import numpy as np
 import time
 from datetime import datetime, timedelta
 import pytz  
-from dhanhq import dhanhq  # Official Dhan Connect Gateway components
+from dhanhq import dhanhq  
 
 # ==========================================
 # 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom injection for retro terminal font system, low-padding cells, and tight visual framing
+# Strict retro-terminal typography, dark mode background, and zero table cell borders
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
@@ -35,7 +35,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. INSTRUMENT REGISTRY WITH OFFICIAL DHAN SECURITY IDs
+# 2. INSTRUMENT REGISTRY WITH OFFICIAL SECURITY IDs
 # ==========================================
 STOCKS_UNIVERSE = {
     "RELIANCE": {"id": 2885, "sym": "RELIANCE"}, "HDFCBANK": {"id": 1333, "sym": "HDFCBANK"}, 
@@ -77,18 +77,18 @@ timeframe_sel = st.sidebar.selectbox("TIMEFRAME SELECT", ["1D", "4HR", "1HR"])
 st.sidebar.info("REFRESH MODE: EXCLUSIVELY MANUAL")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔐 DHAN SECURE KEY STORAGE")
+st.sidebar.markdown("### 🔐 DHAN SECURE KEY PANEL")
 
 client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
 access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
 
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
-# FIXED: Initializing with explicit, labeled keyword arguments only to completely stop the positional crash
+# FIXED: Removed keyword labels. Passed configurations as raw positional strings directly
 dhan = None
 if client_id and access_token:
     try:
-        dhan = dhanhq(client_id=str(client_id).strip(), access_token=str(access_token).strip())
+        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
         st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"AUTHENTICATION FAULT: {str(init_err)}")
@@ -96,17 +96,17 @@ else:
     st.sidebar.error("❌ VAULT APP SECRETS ARE NOT CONFIGURED")
 
 # ==========================================
-# 4. MATH & ENGINE DATA LOGIC FUNCTIONS
+# 4. MATH & HYSTERESIS POSITION ENGINE
 # ==========================================
 def calculate_indicators(df):
     if df.empty or len(df) < 30:
         return None, None
     
-    # Volume 1.5x Multiplier Condition
+    # 1. Volume 1.5x Multiplier Benchmark
     df['avg_vol'] = df['volume'].rolling(window=20).mean()
     df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # Average True Range (ATR) & Native Supertrend (7, 3.0 multiplier)
+    # 2. Average True Range (ATR) & Native Supertrend (7, 3.0 Multiplier)
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift(1)).abs()
     low_cp = (df['low'] - df['close'].shift(1)).abs()
@@ -124,13 +124,13 @@ def calculate_indicators(df):
     df['Supertrend'] = supertrend
     df['ST_Direction'] = direction
     
-    # Native RSI Calculation
+    # 3. Native RSI Calculation
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-9))))
     
-    # Native MACD Convergence Calculations
+    # 4. Native MACD Convergence Calculations
     ema12 = df['close'].ewm(span=12, adjust=False).mean()
     ema26 = df['close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
@@ -152,7 +152,7 @@ def evaluate_stock(symbol, cur, prev):
     past_state = st.session_state.trade_states.get(symbol, {"bull": "WAIT", "bear": "WAIT"})
 
     # ==========================================
-    # 🟢 BULLISH POSITION LOCK-IN MEMORY SYSTEM
+    # 🟢 BULLISH POSITION LOCKED MEMORY SYSTEM
     # ==========================================
     if past_state["bull"] == "BUY":
         if close < cur['Supertrend'] or cur['ST_Direction'] == -1:
@@ -166,7 +166,7 @@ def evaluate_stock(symbol, cur, prev):
             bull_action = "WAIT"
 
     # ==========================================
-    # 🔴 BEARISH POSITION LOCK-IN MEMORY SYSTEM
+    # 🔴 BEARISH POSITION LOCKED MEMORY SYSTEM
     # ==========================================
     if past_state["bear"] == "SELL":
         if close > cur['Supertrend'] or cur['ST_Direction'] == 1:
@@ -205,7 +205,7 @@ def fetch_authentic_dhan_data():
         symbol_lbl = data["sym"]
         
         try:
-            # FIXED: Pointed to the real API endpoint variables
+            # Invoking Dhan's official historical candle signature methods directly
             if timeframe_sel == "1D":
                 raw_data = dhan.historical_daily_candles(
                     security_id=sec_id,
@@ -259,7 +259,7 @@ ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
-st.caption(f"CONNECTED MODE: OFFICIAL DHAN LIVE DATA CONTEXT FEED | TIMEFRAME: {timeframe_sel}")
+st.caption(f"CONNECTED MODE: OFFICIAL DHAN DATA FEED | TIMEFRAME: {timeframe_sel}")
 st.markdown("---")
 
 col_meta, col_btn = st.columns(2)
