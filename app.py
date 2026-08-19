@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime, timedelta
-import pytz  # Forces exact synchronization with Indian Standard Time (IST)
-from dhanhq import dhanhq  # Official Dhan Gateway Connect Module
+import pytz  
+from dhanhq import dhanhq  
 
 # ==========================================
 # 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom injection for retro terminal micro monospace typography, deep black style, and flat clean tables
+# Monospace terminal font, flat tables, and custom color rules
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
@@ -69,7 +69,6 @@ if "stored_data" not in st.session_state:
     st.session_state.stored_data = None
 if "trade_states" not in st.session_state:
     st.session_state.trade_states = {sym: {"bull": "WAIT", "bear": "WAIT"} for sym in STOCKS_UNIVERSE.keys()}
-
 # ==========================================
 # 3. SIDEBAR PARAMETERS & AUTH CONTROLS
 # ==========================================
@@ -83,10 +82,12 @@ st.sidebar.markdown("### 🔐 DHAN SECURE KEY STORAGE")
 client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
 access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
 
-# Explicit standard parameters to activate connection
+DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
+
 dhan = None
 if client_id and access_token:
     try:
+        # Correct library initialization signature
         dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
         st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
     except Exception as init_err:
@@ -151,32 +152,28 @@ def evaluate_stock(symbol, cur, prev):
     past_state = st.session_state.trade_states.get(symbol, {"bull": "WAIT", "bear": "WAIT"})
 
     # ==========================================
-    # 🟢 BULLISH POSITION STATE-LOCKING MEMORY
+    # 🟢 BULLISH POSITION LOCK-IN MEMORY SYSTEM
     # ==========================================
     if past_state["bull"] == "BUY":
-        # Hysteresis Lock: Remain active on BUY until price explicitly closes below the Supertrend
         if close < cur['Supertrend'] or cur['ST_Direction'] == -1:
             bull_action = "WAIT"
         else:
             bull_action = "BUY"
     else:
-        # Strict Setup Conditions Checklist Verification
         if rsi < 30 and fresh_macd_bull and rvol > 1.5 and close > cur['Supertrend']:
             bull_action = "BUY"
         else:
             bull_action = "WAIT"
 
     # ==========================================
-    # 🔴 BEARISH POSITION STATE-LOCKING MEMORY
+    # 🔴 BEARISH POSITION LOCK-IN MEMORY SYSTEM
     # ==========================================
     if past_state["bear"] == "SELL":
-        # Hysteresis Lock: Remain active on SELL until price explicitly closes back above the Supertrend
         if close > cur['Supertrend'] or cur['ST_Direction'] == 1:
             bear_action = "WAIT"
         else:
             bear_action = "SELL"
     else:
-        # Reverse Setup Conditions Checklist Verification
         if rsi > 70 and fresh_macd_bear and rvol > 1.5 and close < cur['Supertrend']:
             bear_action = "SELL"
         else:
@@ -190,11 +187,14 @@ def evaluate_stock(symbol, cur, prev):
         "Bull_Action": bull_action, "Bear_Action": bear_action,
         "Trend": "▲" if cur['ST_Direction'] == 1 else "▼"
     }
+# ==========================================
+# 5. AUTHENTIC API EXCHANGE PIPELINE
+# ==========================================
 def fetch_authentic_dhan_data():
     results = []
     
     if dhan is None:
-        st.error("🚨 DHAN CLIENT NOT LOADED. VERIFY KEY ENTRIES INSIDE SECRETS PANEL.")
+        st.error("🚨 DHAN CONNECT ENGINE INACTIVE. VERIFY CONFIG VAULT SECRETS.")
         return pd.DataFrame()
         
     error_container = st.empty()
@@ -205,7 +205,7 @@ def fetch_authentic_dhan_data():
         symbol_lbl = data["sym"]
         
         try:
-            # FIXED: Shifted parameters to Dhan's explicit native candle function formats
+            # Fixed endpoint names: historical_daily_candles & historical_intraday_candles
             if timeframe_sel == "1D":
                 raw_data = dhan.historical_daily_candles(
                     security_id=sec_id,
@@ -215,7 +215,6 @@ def fetch_authentic_dhan_data():
                     to_date=datetime.now().strftime("%Y-%m-%d")
                 )
             else:
-                # Used for 1HR configurations natively via intraday streaming arrays
                 raw_data = dhan.historical_intraday_candles(
                     security_id=sec_id,
                     exchange_segment="NSE",
@@ -229,11 +228,9 @@ def fetch_authentic_dhan_data():
                 candles = raw_data['data']
                 df = pd.DataFrame(candles)
                 
-                # Check mapping index fields
                 if 'close' not in df.columns and len(candles) > 0:
                     df = pd.DataFrame(candles, columns=['open', 'high', 'low', 'close', 'volume', 'timestamp'])
                 
-                # Compounding 1HR charts up into valid 4HR intervals if specified by drop-down
                 if timeframe_sel == "4HR":
                     df['timestamp'] = pd.to_datetime(df['timestamp'])
                     df = df.resample('4H', on='timestamp').agg({
@@ -245,9 +242,9 @@ def fetch_authentic_dhan_data():
                     results.append(evaluate_stock(symbol_lbl, cur, prev))
             else:
                 msg = raw_data.get('remarks') if raw_data else "Empty Response Stream"
-                logged_errors.append(f"{symbol_lbl} Warning: {msg}")
+                logged_errors.append(f"{symbol_lbl}: {msg}")
         except Exception as request_fault:
-            logged_errors.append(f"{symbol_lbl} System Error: {str(request_fault)}")
+            logged_errors.append(f"{symbol_lbl} Error: {str(request_fault)}")
             
     if logged_errors:
         with error_container.expander("⚠️ VIEW ACTIVE ENGINE DIAGNOSTIC STREAMS"):
@@ -256,19 +253,18 @@ def fetch_authentic_dhan_data():
     return pd.DataFrame(results)
 
 # ==========================================
-# 5. RENDER SYSTEM INTERFACE
+# 6. WORKSTATION RENDERING LAYOUT
 # ==========================================
 ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
 st.caption(f"CONNECTED MODE: OFFICIAL DHAN DATA CONTEXT FEED | TIMEFRAME: {timeframe_sel}")
-
 st.markdown("---")
 
 col_meta, col_btn = st.columns(2)
 with col_meta:
-    st.markdown(f"<p style='color:#666666; font-size:12px; padding-top:14px;'>LAST WORKSTATION EXCHANGE SWEEP (IST): {ist_now.strftime('%d-%b-%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
+    st.markdown(f"LAST WORKSTATION EXCHANGE SWEEP (IST): {ist_now.strftime('%d-%b-%Y %H:%M:%S')}", unsafe_allow_html=True)
 with col_btn:
     trigger_refresh = st.button("RUN LIVE ENGINE SWEEP 🔄", use_container_width=True)
 
@@ -283,7 +279,6 @@ grid_left, grid_right = st.columns(2)
 
 if raw_matrix is not None and not raw_matrix.empty:
     # 📌 PINNED ACTION FLOATING ROW SORTER OVERRIDE
-    # Confirmed BUY and SELL states completely override standard lists to lock right to Rank #1
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "RSI", "Symbol"], ascending=[True, True, True]).reset_index(drop=True)
     bull_df.index += 1
