@@ -185,12 +185,14 @@ def fetch_screener_data():
 st.title("📟 F&O SWING MOMENTUM RADAR WORKSTATION")
 st.caption(f"CONNECTED MODE: DHAN LIVE | INTERVAL: {timeframe} | SCREENING QUANT: 50 INSTRUMENTS")
 
-col_meta, col_btn = st.columns()
+# Fixed: Explicitly passed an integer argument '2' to create two balanced columns
+col_meta, col_btn = st.columns(2)
 with col_meta:
     st.markdown(f"<span class='txt-gray'>LAST ENGINE SWEEP: {datetime.now().strftime('%H:%M:%S')}</span>", unsafe_allow_html=True)
 with col_btn:
     manual_refresh = st.button("MANUAL REFRESH 🔄", use_container_width=True)
 
+# Fixed: Explicitly passed an integer argument '2' to create the dual terminal columns
 grid_left, grid_right = st.columns(2)
 
 # --- ISOLATED REFRESH FRAGMENT LAYER ---
