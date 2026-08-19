@@ -4,7 +4,7 @@ import numpy as np
 import time
 from datetime import datetime, timedelta
 import pytz  # Native timezone handler for strict Indian Standard Time synchronization
-from dhanhq import dhanhq  # Official Dhan Connect Gateway
+from dhanhq import DhanContext, dhanhq  # Official Dhan Connect Gateway components
 
 # ==========================================
 # 1. PAGE CONFIG & TERMINAL CSS STYLING
@@ -15,11 +15,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom injection for professional micro monospace typography, clean grid structures, and sharp cell alignments
+# Custom css for a compact, low-padding terminal table view with small font sizes
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
-        * { font-family: 'JetBrains Mono', monospace !important; }
+        * { font-family: 'JetBrains Mono', monospace !important; font-size: 11px; }
         html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0A !important; color: #CCCCCC !important; }
         [data-testid="stSidebar"] { background-color: #111111 !important; border-right: 1px solid #222222; }
         .terminal-table { width: 100%; border-collapse: collapse; font-size: 10px !important; margin-bottom: 20px; }
@@ -79,12 +79,12 @@ access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_T
 
 DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
 
-# FIXED: Removed the faulty keyword layout parameters entirely. Passed variables cleanly 
-# as plain, positional strings to align with the library class definition.
+# FIXED: Wrapped raw access strings inside the required object container to fix the initialization crash
 dhan = None
 if client_id and access_token:
     try:
-        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
+        dhan_context = DhanContext(client_id=str(client_id).strip(), access_token=str(access_token).strip())
+        dhan = dhanhq(dhan_context)
         st.sidebar.success("✅ DHAN LIVE EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"ENGINE CRITICAL ERROR: {str(init_err)}")
@@ -98,15 +98,12 @@ def calculate_indicators(df):
     if df.empty or len(df) < 65:
         return None, None
     
-    # Momentum Returns
     df['20D_Return'] = (df['close'] - df['close'].shift(20)) / df['close'].shift(20) * 100
     df['60D_Return'] = (df['close'] - df['close'].shift(60)) / df['close'].shift(60) * 100
     
-    # Relative Volume
     df['avg_vol'] = df['volume'].rolling(window=20).mean()
     df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # True Range & ATR Percentage
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift(1)).abs()
     low_cp = (df['low'] - df['close'].shift(1)).abs()
@@ -114,23 +111,19 @@ def calculate_indicators(df):
     df['atr'] = tr.rolling(window=14).mean()
     df['ATR_Pct'] = (df['atr'] / (df['close'] + 1e-9)) * 100
     
-    # Overlays
     df['EMA20'] = df['close'].ewm(span=20, adjust=False).mean()
     df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
     
-    # RSI Engine
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-9))))
     
-    # Convergence Lines
     ema12 = df['close'].ewm(span=12, adjust=False).mean()
     ema26 = df['close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Sig'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
-    # Supertrend Trend Core (7, 3.0 window multiplier)
     hl2 = (df['high'] + df['low']) / 2
     upper = hl2 + (3.0 * df['atr'])
     lower = hl2 - (3.0 * df['atr'])
@@ -156,7 +149,6 @@ def evaluate_stock(symbol, cur, prev):
     chg = ltp - prev_close
     chg_pct = (chg / prev_close) * 100
 
-    # 100-Point Scoring Rules
     bull_score, bear_score = 0, 0
     if r20 > 0: bull_score += 20
     else: bear_score += 20
@@ -174,7 +166,6 @@ def evaluate_stock(symbol, cur, prev):
     else: bear_score += 5
     if cur['turnover'] > cur['avg_turnover']: bull_score += 5; bear_score += 5
 
-    # Strategy Rules Check List Verification
     fresh_macd_bull = (pmacd <= pmsig) and (macd > msig)
     fresh_macd_bear = (pmacd >= pmsig) and (macd < msig)
     
@@ -224,12 +215,11 @@ def fetch_live_market_data():
             except Exception:
                 pass
         
-        # Real-time Simulation Engine: Active ONLY when API keys are blank or hitting temporary server rate limits
+        # Real-time Simulation Engine: Active ONLY when API keys fail to link or hit rate limits
         np.random.seed(int(time.time() * 10) % 4294967295 + abs(hash(key)) % 500)
         close_p = np.random.uniform(200, 3500)
         chg_val = np.random.uniform(-4, 4)
         
-        # Generate varied states to verify row floating parameters
         sim_rsi = np.random.uniform(15, 85)
         sim_macd_cross = np.random.choice([True, False], p=[0.20, 0.80])
         sim_direction = 1 if chg_val > 0 else -1
@@ -275,8 +265,7 @@ grid_left, grid_right = st.columns(2)
 def run_screener_loop():
     raw_matrix = fetch_live_market_data()
     
-    # FIXED: Priority sorter applies a binary condition check. 
-    # Any row displaying an active 'BUY' or 'SELL' trigger floats directly to Rank #1.
+    # FIXED: Re-engineered priority row sorting. Confirmed BUY / SELL signals completely override standard scores to float to Rank 1.
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "Bull_Score", "CHG_Pct"], ascending=[True, False, False]).reset_index(drop=True)
     bull_df.index += 1
