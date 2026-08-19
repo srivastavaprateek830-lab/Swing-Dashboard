@@ -56,7 +56,7 @@ STOCKS_UNIVERSE = {
     "HINDALCO": {"id": 1363, "sym": "HINDALCO"}, "VEDL": {"id": 3063, "sym": "VEDL"}, 
     "JINDALSTEL": {"id": 6733, "sym": "JINDALSTEL"}, "SUNPHARMA": {"id": 3351, "sym": "SUNPHARMA"}, 
     "CIPLA": {"id": 694, "sym": "CIPLA"}, "DRREDDY": {"id": 881, "sym": "DRREDDY"}, 
-    "TECHM": {"id": 13538, "sym": "TECHM"}, "WIPRO": {"id": 3787", "sym": "WIPRO"}, 
+    "TECHM": {"id": 13538, "sym": "TECHM"}, "WIPRO": {"id": 3787, "sym": "WIPRO"}, 
     "LTIM": {"id": 17818, "sym": "LTIM"}, "PERSISTENT": {"id": 18365, "sym": "PERSISTENT"}, 
     "COFORGE": {"id": 11543, "sym": "COFORGE"}, "DIXON": {"id": 21690, "sym": "DIXON"}, 
     "INDIGO": {"id": 11195, "sym": "INDIGO"}, "ASHOKLEY": {"id": 212, "sym": "ASHOKLEY"}, 
