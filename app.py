@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 from datetime import datetime, timedelta
-import pytz  # Handles precise synchronization with Indian Standard Time (IST)
-from dhanhq import DhanContext, dhanhq  # Official Dhan Connect Gateway components
+import pytz  # Forces exact synchronization with Indian Standard Time (IST)
+from dhanhq import dhanhq  # Official Dhan Gateway Connect Module
 
 # ==========================================
-# 1. PAGE CONFIG & TERMINAL CSS STYLING
+# 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
 # ==========================================
 st.set_page_config(
     page_title="FnO Daily Swing Momentum Terminal",
@@ -14,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom injection for retro terminal micro monospace typography, clean grid structures, and sharp cell alignments
+# Custom injection for retro terminal micro monospace typography, deep black style, and flat clean tables
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
@@ -60,7 +61,7 @@ STOCKS_UNIVERSE = {
     "LTIM": {"id": 17818, "sym": "LTIM"}, "PERSISTENT": {"id": 18365, "sym": "PERSISTENT"}, 
     "COFORGE": {"id": 11543, "sym": "COFORGE"}, "DIXON": {"id": 21690, "sym": "DIXON"}, 
     "INDIGO": {"id": 11195, "sym": "INDIGO"}, "ASHOKLEY": {"id": 212, "sym": "ASHOKLEY"}, 
-    "BHEL": {"id": 438, "sym": "BHEL"}, "IOC": {"id": 1624, "sym": "IOC"}, 
+    "BHEL": {"id": 438, "sym": "BHEL"}, "IOC": {"id": 1624", "sym": "IOC"}, 
     "VOLTAS": {"id": 3718, "sym": "VOLTAS"}, "ETERNAL": {"id": 14416, "sym": "BERGEPAINT"}
 }
 
@@ -73,22 +74,20 @@ if "trade_states" not in st.session_state:
 # ==========================================
 st.sidebar.markdown("### 📊 WORKSTATION CONFIG")
 timeframe_sel = st.sidebar.selectbox("TIMEFRAME SELECT", ["1D", "4HR", "1HR"])
-st.sidebar.info("REFRESH: EXCLUSIVELY MANUAL")
+st.sidebar.info("REFRESH MODE: EXCLUSIVELY MANUAL")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔐 DHAN SECURE INSTANTIATION")
+st.sidebar.markdown("### 🔐 DHAN SECURE KEY STORAGE")
 
 client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
 access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
 
-DHAN_INTERVALS = {"1D": "DAY", "4HR": "60", "1HR": "60"}
-
+# Explicit standard parameters to activate connection
 dhan = None
 if client_id and access_token:
     try:
-        dhan_context = DhanContext(client_id=str(client_id).strip(), access_token=str(access_token).strip())
-        dhan = dhanhq(dhan_context)
-        st.sidebar.success("✅ DHAN LIVE EXCHANGE ENGINE LINKED")
+        dhan = dhanhq(str(client_id).strip(), str(access_token).strip())
+        st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
     except Exception as init_err:
         st.sidebar.error(f"AUTHENTICATION FAULT: {str(init_err)}")
 else:
@@ -151,28 +150,32 @@ def evaluate_stock(symbol, cur, prev):
     past_state = st.session_state.trade_states.get(symbol, {"bull": "WAIT", "bear": "WAIT"})
 
     # ==========================================
-    # 🟢 BULLISH POSITION LOCK SYSTEM (HYSTERESIS)
+    # 🟢 BULLISH POSITION STATE-LOCKING MEMORY
     # ==========================================
     if past_state["bull"] == "BUY":
+        # Hysteresis Lock: Remain active on BUY until price explicitly closes below the Supertrend
         if close < cur['Supertrend'] or cur['ST_Direction'] == -1:
             bull_action = "WAIT"
         else:
             bull_action = "BUY"
     else:
+        # Strict Setup Conditions Checklist Verification
         if rsi < 30 and fresh_macd_bull and rvol > 1.5 and close > cur['Supertrend']:
             bull_action = "BUY"
         else:
             bull_action = "WAIT"
 
     # ==========================================
-    # 🔴 BEARISH POSITION LOCK SYSTEM (HYSTERESIS)
+    # 🔴 BEARISH POSITION STATE-LOCKING MEMORY
     # ==========================================
     if past_state["bear"] == "SELL":
+        # Hysteresis Lock: Remain active on SELL until price explicitly closes back above the Supertrend
         if close > cur['Supertrend'] or cur['ST_Direction'] == 1:
             bear_action = "WAIT"
         else:
             bear_action = "SELL"
     else:
+        # Reverse Setup Conditions Checklist Verification
         if rsi > 70 and fresh_macd_bear and rvol > 1.5 and close < cur['Supertrend']:
             bear_action = "SELL"
         else:
@@ -190,36 +193,46 @@ def fetch_authentic_dhan_data():
     results = []
     
     if dhan is None:
-        st.error("🚨 DHAN ENGINE DISCONNECTED. CHECK YOUR STORAGE VAULT CREDS.")
+        st.error("🚨 DHAN CLIENT NOT LOADED. VERIFY KEY ENTRIES INSIDE SECRETS PANEL.")
         return pd.DataFrame()
         
-    # Setup troubleshooting visual logger container inside the UI frame
     error_container = st.empty()
     logged_errors = []
     
     for key, data in STOCKS_UNIVERSE.items():
-        sec_id = data["id"]
+        sec_id = int(data["id"])
         symbol_lbl = data["sym"]
         
         try:
-            # FIXED: Converted exchange segment key string and forced historical integer tracking parameters
-            raw_data = dhan.get_historical_data(
-                security_id=int(sec_id),
-                exchange_segment="NSE",
-                instrument_type="EQUITY",
-                expiry_code=0,
-                from_date=(datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
-                to_date=datetime.now().strftime("%Y-%m-%d"),
-                historical_data=DHAN_INTERVALS[timeframe_sel]
-            )
+            # FIXED: Shifted parameters to Dhan's explicit native candle function formats
+            if timeframe_sel == "1D":
+                raw_data = dhan.historical_daily_candles(
+                    security_id=sec_id,
+                    exchange_segment="NSE",
+                    instrument_type="EQUITY",
+                    from_date=(datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
+                    to_date=datetime.now().strftime("%Y-%m-%d")
+                )
+            else:
+                # Used for 1HR configurations natively via intraday streaming arrays
+                raw_data = dhan.historical_intraday_candles(
+                    security_id=sec_id,
+                    exchange_segment="NSE",
+                    instrument_type="EQUITY",
+                    interval="60",
+                    from_date=(datetime.now() - timedelta(days=20)).strftime("%Y-%m-%d"),
+                    to_date=datetime.now().strftime("%Y-%m-%d")
+                )
             
             if raw_data and raw_data.get('status') == 'success' and 'data' in raw_data:
                 candles = raw_data['data']
                 df = pd.DataFrame(candles)
                 
+                # Check mapping index fields
                 if 'close' not in df.columns and len(candles) > 0:
                     df = pd.DataFrame(candles, columns=['open', 'high', 'low', 'close', 'volume', 'timestamp'])
                 
+                # Compounding 1HR charts up into valid 4HR intervals if specified by drop-down
                 if timeframe_sel == "4HR":
                     df['timestamp'] = pd.to_datetime(df['timestamp'])
                     df = df.resample('4H', on='timestamp').agg({
@@ -230,13 +243,13 @@ def fetch_authentic_dhan_data():
                 if cur is not None:
                     results.append(evaluate_stock(symbol_lbl, cur, prev))
             else:
-                msg = raw_data.get('remarks') if raw_data else "No Response Received"
-                logged_errors.append(f"{symbol_lbl}: {msg}")
+                msg = raw_data.get('remarks') if raw_data else "Empty Response Stream"
+                logged_errors.append(f"{symbol_lbl} Warning: {msg}")
         except Exception as request_fault:
-            logged_errors.append(f"{symbol_lbl} Crash: {str(request_fault)}")
+            logged_errors.append(f"{symbol_lbl} System Error: {str(request_fault)}")
             
     if logged_errors:
-        with error_container.expander("⚠️ VIEW ENGINE DIAGNOSTIC ERROR STREAM LOGS"):
+        with error_container.expander("⚠️ VIEW ACTIVE ENGINE DIAGNOSTIC STREAMS"):
             st.code("\n".join(logged_errors))
             
     return pd.DataFrame(results)
@@ -248,7 +261,7 @@ ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
-st.caption(f"CONNECTED MODE: ACTIVE DHAN API | TIME CONTEXT: {timeframe_sel} SEC_FEED")
+st.caption(f"CONNECTED MODE: OFFICIAL DHAN DATA CONTEXT FEED | TIMEFRAME: {timeframe_sel}")
 
 st.markdown("---")
 
@@ -259,7 +272,7 @@ with col_btn:
     trigger_refresh = st.button("RUN LIVE ENGINE SWEEP 🔄", use_container_width=True)
 
 if st.session_state.stored_data is None or trigger_refresh:
-    with st.spinner("FETCHING TRUE DHAN EXCHANGE DATASTREAMS..."):
+    with st.spinner("QUERYING OFFICIAL DHAN ENGINES FOR CURRENT EXCHANGE VALUES..."):
         fetched_matrix = fetch_authentic_dhan_data()
         if not fetched_matrix.empty:
             st.session_state.stored_data = fetched_matrix
@@ -269,7 +282,7 @@ grid_left, grid_right = st.columns(2)
 
 if raw_matrix is not None and not raw_matrix.empty:
     # 📌 PINNED ACTION FLOATING ROW SORTER OVERRIDE
-    # BUY and SELL triggers completely override standard listing sorting to lock straight to Rank #1
+    # Confirmed BUY and SELL states completely override standard lists to lock right to Rank #1
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "RSI", "Symbol"], ascending=[True, True, True]).reset_index(drop=True)
     bull_df.index += 1
@@ -314,4 +327,4 @@ if raw_matrix is not None and not raw_matrix.empty:
             </tr>"""
         st.markdown(html_bear + "</table>", unsafe_allow_html=True)
 else:
-    st.info("📟 INITIAL SWEEP REQUIRED. CLICK THE LARGE REFRESH BUTTON TO CONNECT TO THE DHAN LIVE DATASTREAMS.")
+    st.info("📟 INITIAL DATA SWEEP REQUIRED. CLICK THE LARGE REFRESH BUTTON TO PULL OFFICIAL DATA ENTRIES FROM DHAN.")
