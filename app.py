@@ -61,7 +61,7 @@ STOCKS_UNIVERSE = {
     "LTIM": {"id": 17818, "sym": "LTIM"}, "PERSISTENT": {"id": 18365, "sym": "PERSISTENT"}, 
     "COFORGE": {"id": 11543, "sym": "COFORGE"}, "DIXON": {"id": 21690, "sym": "DIXON"}, 
     "INDIGO": {"id": 11195, "sym": "INDIGO"}, "ASHOKLEY": {"id": 212, "sym": "ASHOKLEY"}, 
-    "BHEL": {"id": 438, "sym": "BHEL"}, "IOC": {"id": 1624", "sym": "IOC"}, 
+    "BHEL": {"id": 438, "sym": "BHEL"}, "IOC": {"id": 1624, "sym": "IOC"}, 
     "VOLTAS": {"id": 3718, "sym": "VOLTAS"}, "ETERNAL": {"id": 14416, "sym": "BERGEPAINT"}
 }
 
@@ -69,6 +69,7 @@ if "stored_data" not in st.session_state:
     st.session_state.stored_data = None
 if "trade_states" not in st.session_state:
     st.session_state.trade_states = {sym: {"bull": "WAIT", "bear": "WAIT"} for sym in STOCKS_UNIVERSE.keys()}
+
 # ==========================================
 # 3. SIDEBAR PARAMETERS & AUTH CONTROLS
 # ==========================================
