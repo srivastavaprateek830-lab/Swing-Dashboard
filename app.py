@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 from datetime import datetime, timedelta
-import pytz
+import pytz  # Handles precise Indian Standard Time (IST) synchronization
+from dhanhq import DhanContext, dhanhq  # Official Dhan Connect Gateway components
 
 # ==========================================
 # 1. PAGE CONFIG & TERMINAL VISUAL CSS SYSTEM
@@ -10,15 +12,16 @@ import pytz
 st.set_page_config(
     page_title="FnO Daily Swing Momentum Terminal",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Custom injection for professional micro monospace typography and clean grid structures
+# Custom injection for retro terminal font system, low-padding cells, and tight visual framing
 st.markdown("""
     <style>
         @import url('https://googleapis.com');
         * { font-family: 'JetBrains Mono', monospace !important; font-size: 11px; }
         html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0A !important; color: #CCCCCC !important; }
+        [data-testid="stSidebar"] { background-color: #111111 !important; border-right: 1px solid #222222; }
         .terminal-table { width: 100%; border-collapse: collapse; font-size: 10px !important; margin-bottom: 20px; }
         .terminal-table th { background-color: #161616; color: #888888; text-align: left; padding: 5px 6px; border-bottom: 2px solid #222222; font-weight: 700; }
         .terminal-table td { padding: 4px 6px; border-bottom: 1px solid #161616; }
@@ -32,19 +35,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. OFFICIAL NSE STOCKS TECHNICAL MAP
+# 2. OFFICIAL INSTRUMENT RECONCILIATION
 # ==========================================
 STOCKS_UNIVERSE = {
-    "RELIANCE": "RELIANCE", "HDFCBANK": "HDFCBANK", "ICICIBANK": "ICICIBANK", "SBIN": "SBIN", "AXISBANK": "AXISBANK",
-    "KOTAKBANK": "KOTAKBANK", "BAJFINANCE": "BAJFINANCE", "BAJAJFINSV": "BAJAJFINSV", "SHRIRAMFIN": "SHRIRAMFIN", "LT": "LT",
-    "BHARTIARTL": "BHARTIARTL", "INFY": "INFY", "TCS": "TCS", "HCLTECH": "HCLTECH", "TATAMOTORS": "TATAMOTORS",
-    "M&M": "M&M", "MARUTI": "MARUTI", "EICHERMOT": "EICHERMOT", "TVSMOTOR": "TVSMOTOR", "HEROMOTOCO": "HEROMOTOCO",
-    "ADANIENT": "ADANIENT", "ADANIPORTS": "ADANIPORTS", "BEL": "BEL", "HAL": "HAL", "TRENT": "TRENT",
-    "POWERGRID": "POWERGRID", "NTPC": "NTPC", "COALINDIA": "COALINDIA", "ONGC": "ONGC", "BPCL": "BPCL",
-    "TATASTEEL": "TATASTEEL", "JSWSTEEL": "JSWSTEEL", "HINDALCO": "HINDALCO", "VEDL": "VEDL", "JINDALSTEL": "JINDALSTEL",
-    "SUNPHARMA": "SUNPHARMA", "CIPLA": "CIPLA", "DRREDDY": "DRREDDY", "TECHM": "TECHM", "WIPRO": "WIPRO",
-    "LTIM": "LTIM", "PERSISTENT": "PERSISTENT", "COFORGE": "COFORGE", "DIXON": "DIXON", "INDIGO": "INDIGO",
-    "ASHOKLEY": "ASHOKLEY", "BHEL": "BHEL", "IOC": "IOC", "VOLTAS": "VOLTAS", "ETERNAL": "BERGEPAINT"
+    "RELIANCE": {"id": "2885", "sym": "RELIANCE"}, "HDFCBANK": {"id": "1333", "sym": "HDFCBANK"}, 
+    "ICICIBANK": {"id": "4963", "sym": "ICICIBANK"}, "SBIN": {"id": "3045", "sym": "SBIN"}, 
+    "AXISBANK": {"id": "5900", "sym": "AXISBANK"}, "KOTAKBANK": {"id": "1922", "sym": "KOTAKBANK"}, 
+    "BAJFINANCE": {"id": "317", "sym": "BAJFINANCE"}, "BAJAJFINSV": {"id": "16675", "sym": "BAJAJFINSV"}, 
+    "SHRIRAMFIN": {"id": "3232", "sym": "SHRIRAMFIN"}, "LT": {"id": "11483", "sym": "LT"}, 
+    "BHARTIARTL": {"id": "10604", "sym": "BHARTIARTL"}, "INFY": {"id": "1594", "sym": "INFY"}, 
+    "TCS": {"id": "11536", "sym": "TCS"}, "HCLTECH": {"id": "7229", "sym": "HCLTECH"}, 
+    "TATAMOTORS": {"id": "3456", "sym": "TATAMOTORS"}, "M&M": {"id": "2031", "sym": "M&M"}, 
+    "MARUTI": {"id": "10999", "sym": "MARUTI"}, "EICHERMOT": {"id": "910", "sym": "EICHERMOT"}, 
+    "TVSMOTOR": {"id": "8424", "sym": "TVSMOTOR"}, "HEROMOTOCO": {"id": "1348", "sym": "HEROMOTOCO"}, 
+    "ADANIENT": {"id": "25", "sym": "ADANIENT"}, "ADANIPORTS": {"id": "15083", "sym": "ADANIPORTS"}, 
+    "BEL": {"id": "383", "sym": "BEL"}, "HAL": {"id": "2303", "sym": "HAL"}, 
+    "TRENT": {"id": "1964", "sym": "TRENT"}, "POWERGRID": {"id": "14977", "sym": "POWERGRID"}, 
+    "NTPC": {"id": "11630", "sym": "NTPC"}, "COALINDIA": {"id": "20374", "sym": "COALINDIA"}, 
+    "ONGC": {"id": "2475", "sym": "ONGC"}, "BPCL": {"id": "526", "sym": "BPCL"}, 
+    "TATASTEEL": {"id": "3499", "sym": "TATASTEEL"}, "JSWSTEEL": {"id": "11723", "sym": "JSWSTEEL"}, 
+    "HINDALCO": {"id": "1363", "sym": "HINDALCO"}, "VEDL": {"id": "3063", "sym": "VEDL"}, 
+    "JINDALSTEL": {"id": "6733", "sym": "JINDALSTEL"}, "SUNPHARMA": {"id": "3351", "sym": "SUNPHARMA"}, 
+    "CIPLA": {"id": "694", "sym": "CIPLA"}, "DRREDDY": {"id": "881", "sym": "DRREDDY"}, 
+    "TECHM": {"id": "13538", "sym": "TECHM"}, "WIPRO": {"id": "3787", "sym": "WIPRO"}, 
+    "LTIM": {"id": "17818", "sym": "LTIM"}, "PERSISTENT": {"id": "18365", "sym": "PERSISTENT"}, 
+    "COFORGE": {"id": "11543", "sym": "COFORGE"}, "DIXON": {"id": "21690", "sym": "DIXON"}, 
+    "INDIGO": {"id": "11195", "sym": "INDIGO"}, "ASHOKLEY": {"id": "212", "sym": "ASHOKLEY"}, 
+    "BHEL": {"id": "438", "sym": "BHEL"}, "IOC": {"id": "1624", "sym": "IOC"}, 
+    "VOLTAS": {"id": "3718", "sym": "VOLTAS"}, "ETERNAL": {"id": "14416", "sym": "BERGEPAINT"}
 }
 
 if "stored_data" not in st.session_state:
@@ -52,67 +70,90 @@ if "stored_data" not in st.session_state:
 if "trade_states" not in st.session_state:
     st.session_state.trade_states = {sym: {"bull": "WAIT", "bear": "WAIT"} for sym in STOCKS_UNIVERSE.keys()}
 # ==========================================
-# 3. MATHEMATICAL INDICATOR CORE ENGINE
+# 3. SIDEBAR PARAMETERS & AUTH CONTROLS
+# ==========================================
+st.sidebar.markdown("### 📊 WORKSTATION CONFIG")
+st.sidebar.info("INTERVAL FIXED: 1D (DAILY CONTEXT)\nREFRESH: EXCLUSIVELY MANUAL")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔐 DHAN SECURE INSTANTIATION")
+
+client_id = st.secrets.get("dhan_client_id", st.secrets.get("DHAN_CLIENT_ID", ""))
+access_token = st.secrets.get("dhan_access_token", st.secrets.get("DHAN_ACCESS_TOKEN", ""))
+
+# Explicit single context object mapping to pass parameters safely to the constructor
+dhan = None
+if client_id and access_token:
+    try:
+        dhan_context = DhanContext(client_id=str(client_id).strip(), access_token=str(access_token).strip())
+        dhan = dhanhq(dhan_context)
+        st.sidebar.success("✅ DHAN EXCHANGE ENGINE LINKED")
+    except Exception as init_err:
+        st.sidebar.error(f"AUTHENTICATION FAULT: {str(init_err)}")
+else:
+    st.sidebar.error("❌ VAULT APP SECRETS ARE NOT CONFIGURED")
+
+# ==========================================
+# 4. MATH & HYSTERESIS STATE LOGIC ENGINE
 # ==========================================
 def calculate_indicators(df):
     if df.empty or len(df) < 30:
         return None, None
     
-    # 1. Volume 1.5x Trend Multiplier 
-    df['avg_vol'] = df['Volume'].rolling(window=20).mean()
-    df['RVOL'] = df['Volume'] / (df['avg_vol'] + 1e-9)
+    # 1. Volume 1.5x Multiplier Benchmark
+    df['avg_vol'] = df['volume'].rolling(window=20).mean()
+    df['RVOL'] = df['volume'] / (df['avg_vol'] + 1e-9)
     
-    # 2. Average True Range (ATR) & Native Supertrend (7, 3.0 multiplier)
-    high_low = df['High'] - df['Low']
-    high_cp = (df['High'] - df['Close'].shift(1)).abs()
-    low_cp = (df['Low'] - df['Close'].shift(1)).abs()
+    # 2. Average True Range (ATR) & Native Supertrend (7, 3.0 Multiplier)
+    high_low = df['high'] - df['low']
+    high_cp = (df['high'] - df['close'].shift(1)).abs()
+    low_cp = (df['low'] - df['close'].shift(1)).abs()
     tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
     df['atr'] = tr.rolling(window=14).mean()
     
-    hl2 = (df['High'] + df['Low']) / 2
+    hl2 = (df['high'] + df['low']) / 2
     upper = hl2 + (3.0 * df['atr'])
     lower = hl2 - (3.0 * df['atr'])
     supertrend, direction = np.zeros(len(df)), np.ones(len(df))
     
     for i in range(1, len(df)):
-        direction[i] = 1 if df['Close'].iloc[i] > upper.iloc[i-1] else (-1 if df['Close'].iloc[i] < lower.iloc[i-1] else direction[i-1])
+        direction[i] = 1 if df['close'].iloc[i] > upper.iloc[i-1] else (-1 if df['close'].iloc[i] < lower.iloc[i-1] else direction[i-1])
         supertrend[i] = lower.iloc[i] if direction[i] == 1 else upper.iloc[i]
     df['Supertrend'] = supertrend
     df['ST_Direction'] = direction
     
-    # 3. Relative Strength Index (RSI) Formula
-    delta = df['Close'].diff()
+    # 3. Native RSI Calculation
+    delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-9))))
     
-    # 4. Moving Average Convergence Divergence (MACD)
-    ema12 = df['Close'].ewm(span=12, adjust=False).mean()
-    ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+    # 4. Native MACD Convergence Calculations
+    ema12 = df['close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Sig'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
     return df.iloc[-1], df.iloc[-2]
 
 def evaluate_stock(symbol, cur, prev):
-    close, rvol, rsi = cur['Close'], cur['RVOL'], cur['RSI']
+    close, rvol, rsi = cur['close'], cur['RVOL'], cur['RSI']
     macd, msig, pmacd, pmsig = cur['MACD'], cur['MACD_Sig'], prev['MACD'], prev['MACD_Sig']
     
-    prev_close = prev['Close']
+    prev_close = prev['close']
     chg = close - prev_close
     chg_pct = (chg / prev_close) * 100
 
     fresh_macd_bull = (pmacd <= pmsig) and (macd > msig)
     fresh_macd_bear = (pmacd >= pmsig) and (macd < msig)
     
-    # Retrieve previous locked state to evaluate hysteresis conditions
     past_state = st.session_state.trade_states.get(symbol, {"bull": "WAIT", "bear": "WAIT"})
 
     # ==========================================
     # 🟢 BULLISH POSITION LOCK SYSTEM (HYSTERESIS)
     # ==========================================
     if past_state["bull"] == "BUY":
-        # EXIT CONDITION: Keep signal green on BUY until price explicitly closes below Supertrend line
+        # Keep holding signal green on BUY until price explicitly closes below Supertrend line
         if close < cur['Supertrend'] or cur['ST_Direction'] == -1:
             bull_action = "WAIT"
         else:
@@ -128,7 +169,7 @@ def evaluate_stock(symbol, cur, prev):
     # 🔴 BEARISH POSITION LOCK SYSTEM (HYSTERESIS)
     # ==========================================
     if past_state["bear"] == "SELL":
-        # EXIT CONDITION: Keep short trade active until price closes back above Supertrend line
+        # Keep short trade active until price closes back above Supertrend line
         if close > cur['Supertrend'] or cur['ST_Direction'] == 1:
             bear_action = "WAIT"
         else:
@@ -140,7 +181,6 @@ def evaluate_stock(symbol, cur, prev):
         else:
             bear_action = "WAIT"
 
-    # Save state back into persistent cache
     st.session_state.trade_states[symbol] = {"bull": bull_action, "bear": bear_action}
 
     return {
@@ -149,51 +189,54 @@ def evaluate_stock(symbol, cur, prev):
         "Bull_Action": bull_action, "Bear_Action": bear_action,
         "Trend": "▲" if cur['ST_Direction'] == 1 else "▼"
     }
-def fetch_authentic_exchange_data():
+def fetch_authentic_dhan_data():
     results = []
     
-    # Connecting directly to reliable open financial databases to stream true NSE equities quotes
-    for symbol, nse_ticker in STOCKS_UNIVERSE.items():
+    # Strict validation check: If the token connection is down, halt execution immediately
+    if dhan is None:
+        st.error("🚨 DHAN ENGINE DISCONNECTED. VERIFY CLIENT PARAMS INSIDE STORAGE VAULT.")
+        return pd.DataFrame()
+        
+    for key, data in STOCKS_UNIVERSE.items():
+        sec_id = data["id"]
+        symbol_lbl = data["sym"]
+        
         try:
-            # Querying structural daily records over the last 90 days context window
-            url = f"https://yahoo.com{nse_ticker}?period1={int((datetime.now() - timedelta(days=90)).timestamp())}&period2={int(datetime.now().timestamp())}&interval=1d&events=history&includeAdjustedClose=true"
-            df = pd.read_csv(url)
+            # Querying the actual daily closed records directly from Dhan Exchange Servers
+            raw_data = dhan.get_historical_data(
+                security_id=str(sec_id),
+                exchange_segment="NSE_EQ",
+                instrument_type="EQUITY",
+                expiry_code=0,
+                from_date=(datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
+                to_date=datetime.now().strftime("%Y-%m-%d"),
+                historical_data="DAY"
+            )
             
-            if not df.empty and len(df) >= 30:
+            if raw_data and raw_data.get('status') == 'success' and 'data' in raw_data:
+                candles = raw_data['data']
+                
+                # Parse response object nodes cleanly into pandas structures
+                df = pd.DataFrame(candles)
+                if 'close' not in df.columns and len(candles) > 0:
+                    df = pd.DataFrame(candles, columns=['open', 'high', 'low', 'close', 'volume', 'timestamp'])
+                
                 cur, prev = calculate_indicators(df)
                 if cur is not None:
-                    results.append(evaluate_stock(symbol, cur, prev))
-                    continue
+                    results.append(evaluate_stock(symbol_lbl, cur, prev))
         except Exception:
             pass
-            
-    # Production Fallback Layer: Fills the interface with valid market data if corporate firewall blocks download
-    if len(results) < 5:
-        results = []
-        for symbol in STOCKS_UNIVERSE.keys():
-            np.random.seed(abs(hash(symbol)) % 1000 + int(datetime.now().day))
-            base_p = np.random.uniform(100, 4000)
-            close_p = base_p * (1 + np.random.uniform(-0.015, 0.015))
-            chg_val = close_p * np.random.uniform(-0.02, 0.02)
-            
-            # Pushing explicit strategy triggers on specific indices to verify row sorting
-            sim_rsi = 24.2 if symbol in ["RELIANCE", "TCS", "INFY"] else (76.8 if symbol in ["HDFCBANK", "SBIN"] else np.random.uniform(35, 65))
-            sim_direction = 1 if sim_rsi == 24.2 else (-1 if sim_rsi == 76.8 else 1)
-            
-            dummy_cur = {'Close': close_p, 'RVOL': 1.8, 'RSI': sim_rsi, 'MACD': 1.0, 'MACD_Sig': 0.5, 'ST_Direction': sim_direction, 'Supertrend': close_p * 0.95}
-            dummy_prev = {'Close': close_p - chg_val, 'MACD': 0.2, 'MACD_Sig': 0.4}
-            results.append(evaluate_stock(symbol, dummy_cur, dummy_prev))
             
     return pd.DataFrame(results)
 
 # ==========================================
-# 4. TERMINAL GRID LAYOUT RENDERER
+# 5. TERMINAL GRID LAYOUT RENDERER
 # ==========================================
 ist_zone = pytz.timezone('Asia/Kolkata')
 ist_now = datetime.now(ist_zone)
 
 st.title("📟 F&O DAILY SWING MOMENTUM TERMINAL")
-st.caption("CONNECTED MODE: HIGH-SPEED AUTOMATED NSE ENGINE | DATA CONTEXT: DAILY BARS")
+st.caption("CONNECTED MODE: SECURE ACTIVE DHAN FEED | TIME CONTEXT: DAILY BARS")
 
 st.markdown("---")
 
@@ -203,16 +246,17 @@ with col_meta:
 with col_btn:
     trigger_refresh = st.button("RUN LIVE ENGINE SWEEP 🔄", use_container_width=True)
 
+# Explicit rule layout: Fire the raw fetch call only on manual click interventions
 if st.session_state.stored_data is None or trigger_refresh:
-    with st.spinner("FETCHING TRUE NSE REPRODUCIBLE DATASETS..."):
-        st.session_state.stored_data = fetch_authentic_exchange_data()
+    with st.spinner("COMMUNICATING DIRECTLY WITH DHAN EXCHANGE SERVERS..."):
+        st.session_state.stored_data = fetch_authentic_dhan_data()
 
 raw_matrix = st.session_state.stored_data
 grid_left, grid_right = st.columns(2)
 
-if not raw_matrix.empty:
-    # 📌 PINNED ACTION FLOATING ROW SORTER
-    # BUY and SELL triggers completely override standard index tracking to float to row Rank #1
+if raw_matrix is not None and not raw_matrix.empty:
+    # 📌 PINNED ACTION FLOATING ROW SORTER OVERRIDE
+    # BUY and SELL triggers completely override standard listing sorting to lock straight to Rank #1
     raw_matrix['bull_priority'] = raw_matrix['Bull_Action'].apply(lambda x: 0 if x == "BUY" else 1)
     bull_df = raw_matrix.sort_values(by=["bull_priority", "RSI", "Symbol"], ascending=[True, True, True]).reset_index(drop=True)
     bull_df.index += 1
@@ -221,7 +265,7 @@ if not raw_matrix.empty:
     bear_df = raw_matrix.sort_values(by=["bear_priority", "RSI", "Symbol"], ascending=[True, False, True]).reset_index(drop=True)
     bear_df.index += 1
 
-    # ---- RENDER BULLISH GRID ----
+    # ---- RENDER BULLISH LONG GRID ----
     with grid_left:
         st.markdown("<span style='color: #00FF66; font-weight: bold;'>🟢 LONG SETUP / BULLISH SWING</span>", unsafe_allow_html=True)
         html_bull = """
@@ -239,7 +283,7 @@ if not raw_matrix.empty:
             </tr>"""
         st.markdown(html_bull + "</table>", unsafe_allow_html=True)
 
-    # ---- RENDER BEARISH GRID ----
+    # ---- RENDER BEARISH SHORT GRID ----
     with grid_right:
         st.markdown("<span style='color: #FF3344; font-weight: bold;'>🔴 SHORT SETUP / BEARISH SWING</span>", unsafe_allow_html=True)
         html_bear = """
@@ -256,3 +300,5 @@ if not raw_matrix.empty:
                 <td class='{trd_cls}'>{row['Trend']}</td><td class='{act_cls}'>{row['Bear_Action']}</td>
             </tr>"""
         st.markdown(html_bear + "</table>", unsafe_allow_html=True)
+else:
+    st.info("📟 INITIAL SWEEP REQUIRED. CLICK THE LARGE REFRESH BUTTON TO CONNECT TO THE DHAN LIVE DATASTREAMS.")
