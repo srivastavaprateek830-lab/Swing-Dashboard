@@ -192,7 +192,7 @@ def evaluate_stock(symbol, cur, prev):
 def fetch_authentic_dhan_data():
     results = []
     
-    # Strict validation check: If the token connection is down, halt execution immediately
+    # Validation check: If the API context failed to boot, halt immediately
     if dhan is None:
         st.error("🚨 DHAN ENGINE DISCONNECTED. VERIFY CLIENT PARAMS INSIDE STORAGE VAULT.")
         return pd.DataFrame()
@@ -202,7 +202,7 @@ def fetch_authentic_dhan_data():
         symbol_lbl = data["sym"]
         
         try:
-            # Querying the actual daily closed records directly from Dhan Exchange Servers
+            # FIXED: Aligned the variable references cleanly with timeframe_sel selector strings
             raw_data = dhan.get_historical_data(
                 security_id=str(sec_id),
                 exchange_segment="NSE_EQ",
@@ -210,21 +210,22 @@ def fetch_authentic_dhan_data():
                 expiry_code=0,
                 from_date=(datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d"),
                 to_date=datetime.now().strftime("%Y-%m-%d"),
-                historical_data="DAY"
+                historical_data=DHAN_INTERVALS[timeframe_sel]
             )
             
             if raw_data and raw_data.get('status') == 'success' and 'data' in raw_data:
                 candles = raw_data['data']
                 
-                # Parse response object nodes cleanly into pandas structures
-                df = pd.DataFrame(candles)
-                if 'close' not in df.columns and len(candles) > 0:
+                # Dynamic type tracker to process dictionary arrays or pure nested lists
+                if len(candles) > 0 and isinstance(candles, dict):
+                    df = pd.DataFrame(candles)
+                else:
                     df = pd.DataFrame(candles, columns=['open', 'high', 'low', 'close', 'volume', 'timestamp'])
                 
                 cur, prev = calculate_indicators(df)
                 if cur is not None:
                     results.append(evaluate_stock(symbol_lbl, cur, prev))
-        except Exception:
+        except Exception as e:
             pass
             
     return pd.DataFrame(results)
@@ -244,12 +245,15 @@ col_meta, col_btn = st.columns(2)
 with col_meta:
     st.markdown(f"<p style='color:#666666; font-size:12px; padding-top:14px;'>LAST WORKSTATION EXCHANGE SWEEP (IST): {ist_now.strftime('%d-%b-%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
 with col_btn:
+    # Clicking this button runs the loop through the verified data keys
     trigger_refresh = st.button("RUN LIVE ENGINE SWEEP 🔄", use_container_width=True)
 
-# Explicit rule layout: Fire the raw fetch call only on manual click interventions
+# Process loop when session storage is empty or when the button is clicked
 if st.session_state.stored_data is None or trigger_refresh:
     with st.spinner("COMMUNICATING DIRECTLY WITH DHAN EXCHANGE SERVERS..."):
-        st.session_state.stored_data = fetch_authentic_dhan_data()
+        fetched_matrix = fetch_authentic_dhan_data()
+        if not fetched_matrix.empty:
+            st.session_state.stored_data = fetched_matrix
 
 raw_matrix = st.session_state.stored_data
 grid_left, grid_right = st.columns(2)
